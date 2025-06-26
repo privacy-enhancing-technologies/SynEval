@@ -1,0 +1,53 @@
+{
+  "model_metrics": {
+    "classification_text_rating": {
+      "model_path": "cache/utility_models/classification_text_rating_model.joblib",
+      "metrics": {
+        "1.0": {
+          "precision": 0.36363636363636365,
+          "recall": 0.10810810810810811,
+          "f1-score": 0.16666666666666666,
+          "support": 37.0
+        },
+        "2.0": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 32.0
+        },
+        "3.0": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 32.0
+        },
+        "4.0": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1-score": 0.0,
+          "support": 43.0
+        },
+        "5.0": {
+          "precision": 0.5406360424028268,
+          "recall": 0.9807692307692307,
+          "f1-score": 0.6970387243735763,
+          "support": 156.0
+        },
+        "accuracy": 0.5233333333333333,
+        "macro avg": {
+          "precision": 0.1808544812078381,
+          "recall": 0.21777546777546775,
+          "f1-score": 0.17274107820804857,
+          "support": 300.0
+        },
+        "weighted avg": {
+          "precision": 0.3259792268979548,
+          "recall": 0.5233333333333333,
+          "f1-score": 0.38301569222981524,
+          "support": 300.0
+        }
+      }
+    }
+  },
+  "vectorizer": "cache/utility_models/classification_text_rating_vectorizer.joblib"
+}

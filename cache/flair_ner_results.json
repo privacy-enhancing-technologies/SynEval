@@ -1,0 +1,49 @@
+{
+  "entities_sample_dataset": {
+    "total_entities": 28,
+    "total_tokens": 99,
+    "avg_entity_density": 0.2828282828282828,
+    "entity_counts_by_type": {
+      "LOC": 12,
+      "ORG": 6,
+      "PER": 10
+    },
+    "entities_by_type": {
+      "LOC": [
+        "Mountain View",
+        "Boston",
+        "Seattle",
+        "Cambridge",
+        "Baltimore",
+        "United States",
+        "Massachusetts",
+        "California",
+        "New York",
+        "Washington",
+        "Chicago",
+        "Johns Hopkins Hospital"
+      ],
+      "ORG": [
+        "Goldman Sachs",
+        "Stanford University",
+        "Google",
+        "Facebook",
+        "Apple",
+        "Microsoft"
+      ],
+      "PER": [
+        "David Wilson",
+        "Tim Cook",
+        "Lori Lightfoot",
+        "Joe Biden",
+        "Mark Zuckerberg",
+        "Emily Brown",
+        "Lisa Anderson",
+        "Michael Chen",
+        "Sarah Johnson",
+        "John Smith"
+      ]
+    },
+    "risk_level": "high"
+  }
+}

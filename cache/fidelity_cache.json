@@ -1,0 +1,97 @@
+{
+  "diagnostic": {
+    "original": {
+      "data_validity": 1.0,
+      "data_structure": 1.0,
+      "overall_score": 1.0
+    },
+    "synthetic": {
+      "data_validity": 0.4542857142857143,
+      "data_structure": 1.0,
+      "overall_score": 0.7271428571428571
+    }
+  },
+  "quality": {
+    "original": {
+      "column_shapes": 1.0,
+      "column_pair_trends": 1.0,
+      "overall_score": 1.0
+    },
+    "synthetic": {
+      "column_shapes": 0.35197142857142855,
+      "column_pair_trends": 0.6435100294817687,
+      "overall_score": 0.4977407290265986
+    }
+  },
+  "text": {
+    "original": {
+      "title": {
+        "length_stats": {
+          "mean": 20.537607521504302,
+          "std": 16.315550714448047
+        },
+        "word_count_stats": {
+          "mean": 3.836867373474695,
+          "std": 3.1608053207523605
+        },
+        "keyword_analysis": {
+          "top_keywords": {
+            "stars": 0.1496479276594322,
+            "great": 0.07679880526070956,
+            "love": 0.04997503853040659,
+            "nice": 0.04398707939004596,
+            "good": 0.03971121625330547,
+            "cute": 0.03761142614736404,
+            "quality": 0.029783206232524888,
+            "perfect": 0.02779950274021467,
+            "fit": 0.027007436740152695,
+            "small": 0.02648641973464678
+          }
+        },
+        "sentiment_analysis": {
+          "mean": 0.27435424428333716,
+          "std": 0.3918429251040446,
+          "sentiment_distribution": {
+            "negative": 8.15,
+            "neutral": 40.28,
+            "positive": 51.57000000000001
+          }
+        }
+      },
+      "text": {
+        "length_stats": {
+          "mean": 142.25300120048018,
+          "std": 180.0758183826454
+        },
+        "word_count_stats": {
+          "mean": 27.046918767507,
+          "std": 34.16608494091617
+        },
+        "keyword_analysis": {
+          "top_keywords": {
+            "love": 0.09946021040153563,
+            "great": 0.09902599307291378,
+            "like": 0.07721838739442971,
+            "fit": 0.07204000251147712,
+            "good": 0.06515947822339414,
+            "nice": 0.06413060449328375,
+            "size": 0.05938139155469766,
+            "quality": 0.0585772715395417,
+            "just": 0.054632194631783516,
+            "cute": 0.05412467041639474
+          }
+        },
+        "sentiment_analysis": {
+          "mean": 0.29970990322389923,
+          "std": 0.31867502149706944,
+          "sentiment_distribution": {
+            "negative": 7.41,
+            "neutral": 21.07,
+            "positive": 71.52
+          }
+        }
+      }
+    },
+    "synthetic": {}
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "fidelity": {
+    "diagnostic": {
+      "Data Validity": 0.4543,
+      "Data Structure": 1.0,
+      "Overall": {
+        "score": 0.7271
+      }
+    },
+    "quality": {
+      "Column Shapes": 0.571,
+      "Column Pair Trends": 0.6435,
+      "Overall": {
+        "score": 0.6072
+      }
+    },
+    "text": {
+      "title": {
+        "length_stats": {
+          "original_mean": 20.537607521504302,
+          "original_std": 16.315550714448047,
+          "synthetic_mean": 18.803333333333335,
+          "synthetic_std": 5.8129703511400255
+        },
+        "word_count_stats": {
+          "original_mean": 3.836867373474695,
+          "original_std": 3.1608053207523605,
+          "synthetic_mean": 2.756666666666667,
+          "synthetic_std": 0.8944957411816984
+        },
+        "keyword_analysis": {
+          "original_top_keywords": {
+            "stars": 0.1496479276594322,
+            "great": 0.07679880526070956,
+            "love": 0.04997503853040659,
+            "nice": 0.04398707939004596,
+            "good": 0.03971121625330547,
+            "cute": 0.03761142614736404,
+            "quality": 0.029783206232524888,
+            "perfect": 0.02779950274021467,
+            "fit": 0.027007436740152695,
+            "small": 0.02648641973464678
+          },
+          "synthetic_top_keywords": {
+            "good": 0.03666666666666667,
+            "great": 0.030000000000000002,
+            "perfect": 0.013333333333333334,
+            "nice": 0.01,
+            "love": 0.006666666666666667,
+            "price": 0.006666666666666667,
+            "quality": 0.006666666666666667,
+            "pretty": 0.0033333333333333335,
+            "beautiful": 0.0,
+            "buy": 0.0
+          }
+        },
+        "sentiment_analysis": {
+          "original_mean": 0.27435424428333716,
+          "original_std": 0.3918429251040446,
+          "synthetic_mean": 0.11906030081030082,
+          "synthetic_std": 0.37110914459412925,
+          "original_sentiment_distribution": {
+            "negative": 8.15,
+            "neutral": 40.28,
+            "positive": 51.57000000000001
+          },
+          "synthetic_sentiment_distribution": {
+            "negative": 15.333333333333332,
+            "neutral": 49.333333333333336,
+            "positive": 35.333333333333336
+          }
+        }
+      },
+      "text": {
+        "length_stats": {
+          "original_mean": 142.25300120048018,
+          "original_std": 180.0758183826454,
+          "synthetic_mean": 233.37333333333333,
+          "synthetic_std": 65.31944110940508
+        },
+        "word_count_stats": {
+          "original_mean": 27.046918767507,
+          "original_std": 34.16608494091617,
+          "synthetic_mean": 40.48,
+          "synthetic_std": 9.997136713825434
+        },
+        "keyword_analysis": {
+          "original_top_keywords": {
+            "love": 0.09946021040153563,
+            "great": 0.09902599307291378,
+            "like": 0.07721838739442971,
+            "fit": 0.07204000251147712,
+            "good": 0.06515947822339414,
+            "nice": 0.06413060449328375,
+            "size": 0.05938139155469766,
+            "quality": 0.0585772715395417,
+            "just": 0.054632194631783516,
+            "cute": 0.05412467041639474
+          },
+          "synthetic_top_keywords": {
+            "really": 0.15173125688064198,
+            "like": 0.1512476136987983,
+            "great": 0.11708537356805065,
+            "just": 0.07882102086393145,
+            "good": 0.059297038688091136,
+            "love": 0.049543255963073206,
+            "quality": 0.028415280466916184,
+            "nice": 0.01697765512591307,
+            "perfect": 0.01298582389318665,
+            "size": 0.010840039061623605
+          }
+        },
+        "sentiment_analysis": {
+          "original_mean": 0.29970990322389923,
+          "original_std": 0.31867502149706944,
+          "synthetic_mean": 0.18690166792606278,
+          "synthetic_std": 0.22107685154087015,
+          "original_sentiment_distribution": {
+            "negative": 7.41,
+            "neutral": 21.07,
+            "positive": 71.52
+          },
+          "synthetic_sentiment_distribution": {
+            "negative": 7.333333333333333,
+            "neutral": 25.666666666666664,
+            "positive": 67.0
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "tabular_diversity": {
+    "coverage": {},
+    "uniqueness": {
+      "original_duplicate_ratio": 0.0
+    },
+    "numerical_metrics": {
+      "helpful_vote": {
+        "real_statistics": {
+          "min": 0.0,
+          "max": 123.0
+        }
+      }
+    },
+    "categorical_metrics": {
+      "rating": {
+        "real_categories": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0
+        ]
+      }
+    },
+    "entropy_metrics": {
+      "column_entropy": {},
+      "dataset_entropy": {
+        "real": null
+      }
+    }
+  },
+  "text_diversity": {
+    "real": {
+      "title": {
+        "lexical_diversity": {
+          "1-gram": {
+            "total": 25285,
+            "unique": 3479,
+            "unique_ratio": 0.13759145738580186,
+            "entropy": 8.919174385873493,
+            "normalized_entropy": 0.7581458637194154
+          },
+          "2-gram": {
+            "total": 15331,
+            "unique": 10133,
+            "unique_ratio": 0.6609484051920944,
+            "entropy": 12.114292716665334,
+            "normalized_entropy": 0.9103854134096463
+          },
+          "3-gram": {
+            "total": 7475,
+            "unique": 7285,
+            "unique_ratio": 0.974581939799331,
+            "entropy": 12.807808072994534,
+            "normalized_entropy": 0.998214816004486
+          },
+          "4-gram": {
+            "total": 4120,
+            "unique": 4114,
+            "unique_ratio": 0.9985436893203884,
+            "entropy": 12.005516000712298,
+            "normalized_entropy": 0.9999325290844728
+          },
+          "5-gram": {
+            "total": 2179,
+            "unique": 2179,
+            "unique_ratio": 1.0,
+            "entropy": 11.089450481115984,
+            "normalized_entropy": 1.0000000000000069
+          }
+        },
+        "semantic_diversity": {
+          "total_mst_weight": 160.3155280747701,
+          "average_edge_weight": 0.02587821276428896,
+          "distinct_nodes": 6189,
+          "distinct_ratio": 0.6189
+        },
+        "sentiment_diversity": {
+          "sentiment_by_rating": {
+            "1.0": 0.23017241379310344,
+            "2.0": 0.27897574123989216,
+            "3.0": 0.5573940020682523,
+            "4.0": 0.8324982104509664,
+            "5.0": 0.9495812979762736
+          },
+          "ideal_sentiment": {
+            "1.0": 0.0,
+            "2.0": 0.25,
+            "3.0": 0.5,
+            "4.0": 0.75,
+            "5.0": 1.0
+          },
+          "sentiment_alignment_score": 0.9101081860848119
+        }
+      },
+      "text": {
+        "lexical_diversity": {
+          "1-gram": {
+            "total": 134226,
+            "unique": 9650,
+            "unique_ratio": 0.07189367186685143,
+            "entropy": 10.39833255790216,
+            "normalized_entropy": 0.7855913032231338
+          },
+          "2-gram": {
+            "total": 124258,
+            "unique": 86475,
+            "unique_ratio": 0.6959310466931706,
+            "entropy": 15.833125179570393,
+            "normalized_entropy": 0.9654347277725205
+          },
+          "3-gram": {
+            "total": 114865,
+            "unique": 110645,
+            "unique_ratio": 0.9632612196926827,
+            "entropy": 16.716364360662787,
+            "normalized_entropy": 0.9976596229683476
+          },
+          "4-gram": {
+            "total": 106302,
+            "unique": 105932,
+            "unique_ratio": 0.9965193505296231,
+            "entropy": 16.689976249411266,
+            "normalized_entropy": 0.9998321016315638
+          },
+          "5-gram": {
+            "total": 98406,
+            "unique": 98335,
+            "unique_ratio": 0.9992784992784993,
+            "entropy": 16.58470938856223,
+            "normalized_entropy": 0.9999573123869746
+          }
+        },
+        "semantic_diversity": {
+          "total_mst_weight": 38.96484173181145,
+          "average_edge_weight": 0.004105451662818612,
+          "distinct_nodes": 9487,
+          "distinct_ratio": 0.9487
+        },
+        "sentiment_diversity": {
+          "sentiment_by_rating": {
+            "1.0": 0.10948275862068965,
+            "2.0": 0.13611859838274934,
+            "3.0": 0.32298136645962733,
+            "4.0": 0.6905444126074498,
+            "5.0": 0.9255765199161425
+          },
+          "ideal_sentiment": {
+            "1.0": 0.0,
+            "2.0": 0.25,
+            "3.0": 0.5,
+            "4.0": 0.75,
+            "5.0": 1.0
+          },
+          "sentiment_alignment_score": 0.8931476277490559
+        }
+      }
+    }
+  }
+}
