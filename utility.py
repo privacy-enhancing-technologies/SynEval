@@ -11,9 +11,127 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 import logging
+import os
+import hashlib
+import json
+import pickle
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# GPU acceleration setup
+def setup_gpu_acceleration():
+    """Setup GPU acceleration if available."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return 'cuda'
+        else:
+            return 'cpu'
+    except ImportError:
+        return 'cpu'
+
+# Initialize device as None - will be set when evaluator is created
+DEVICE = None
+
+def compute_dataset_fingerprint(data: pd.DataFrame, metadata: Dict) -> str:
+    """
+    Compute a unique fingerprint for the dataset to identify changes.
+    
+    Args:
+        data: DataFrame to fingerprint
+        metadata: Metadata dictionary
+    
+    Returns:
+        str: SHA256 hash of dataset characteristics
+    """
+    # Create a fingerprint based on data characteristics
+    fingerprint_data = {
+        'shape': data.shape,
+        'columns': list(data.columns),
+        'dtypes': {col: str(dtype) for col, dtype in data.dtypes.items()},
+        'metadata_columns': list(metadata.get('columns', {}).keys()),
+        'sample_hash': hashlib.sha256(
+            data.head(1000).to_string().encode()
+        ).hexdigest()[:16],  # First 1000 rows hash
+        'total_hash': hashlib.sha256(
+            data.to_string().encode()
+        ).hexdigest()[:16]   # Full dataset hash
+    }
+    
+    # Convert to string and hash
+    fingerprint_str = json.dumps(fingerprint_data, sort_keys=True)
+    return hashlib.sha256(fingerprint_str.encode()).hexdigest()
+
+class SmartCache:
+    """Smart cache system with dataset fingerprinting."""
+    
+    def __init__(self, cache_dir: str = "./cache"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+        self.fingerprint_file = self.cache_dir / "dataset_fingerprints.json"
+        self.fingerprints = self._load_fingerprints()
+    
+    def _load_fingerprints(self) -> Dict:
+        """Load dataset fingerprints."""
+        if self.fingerprint_file.exists():
+            try:
+                with open(self.fingerprint_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logging.warning(f"Error loading fingerprints: {str(e)}")
+        return {}
+    
+    def _save_fingerprints(self):
+        """Save dataset fingerprints."""
+        try:
+            with open(self.fingerprint_file, 'w') as f:
+                json.dump(self.fingerprints, f, indent=2)
+        except Exception as e:
+            logging.warning(f"Error saving fingerprints: {str(e)}")
+    
+    def get_cache_path(self, cache_type: str, column: str = None) -> Path:
+        """Get cache file path."""
+        if column:
+            return self.cache_dir / f"{cache_type}_{column}.pkl"
+        return self.cache_dir / f"{cache_type}.pkl"
+    
+    def is_valid_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> bool:
+        """Check if cache is valid for current dataset."""
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        return self.fingerprints.get(cache_key) == dataset_fingerprint
+    
+    def load_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> Optional[Dict]:
+        """Load cache if valid."""
+        if not self.is_valid_cache(cache_type, dataset_fingerprint, column):
+            return None
+        
+        cache_path = self.get_cache_path(cache_type, column)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                logging.warning(f"Error loading cache {cache_type}: {str(e)}")
+        return None
+    
+    def save_cache(self, cache_type: str, dataset_fingerprint: str, data: Dict, column: str = None):
+        """Save cache with fingerprint."""
+        cache_path = self.get_cache_path(cache_type, column)
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        
+        try:
+            with open(cache_path, 'wb') as f:
+                pickle.dump(data, f)
+            
+            # Update fingerprint
+            self.fingerprints[cache_key] = dataset_fingerprint
+            self._save_fingerprints()
+            
+            logging.info(f"Saved cache for {cache_type}")
+        except Exception as e:
+            logging.warning(f"Error saving cache {cache_type}: {str(e)}")
 
 class UtilityEvaluator:
     def __init__(self, 
@@ -40,6 +158,22 @@ class UtilityEvaluator:
         self.input_columns = input_columns
         self.output_columns = output_columns
         self.task_type = self._determine_task_type(task_type)
+        
+        # Initialize smart cache
+        self.cache = SmartCache('./cache')
+        
+        # Compute dataset fingerprints
+        self.original_fingerprint = compute_dataset_fingerprint(original_data, metadata)
+        self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
+        
+        # Setup GPU acceleration only when evaluator is created
+        global DEVICE
+        if DEVICE is None:
+            DEVICE = setup_gpu_acceleration()
+            if DEVICE == 'cuda':
+                logger.info("GPU acceleration available - using CUDA")
+            else:
+                logger.info("GPU not available - using CPU")
         
     def _determine_task_type(self, task_type: str) -> str:
         """Determine the type of task based on output columns."""
@@ -93,16 +227,43 @@ class UtilityEvaluator:
         return X, y
     
     def _get_model(self):
-        """Get appropriate model based on task type."""
-        if self.task_type == 'text_classification':
-            return Pipeline([
-                ('tfidf', TfidfVectorizer(max_features=1000)),
-                ('classifier', RandomForestClassifier(n_estimators=100))
-            ])
-        elif self.task_type == 'classification':
-            return RandomForestClassifier(n_estimators=100)
-        else:  # regression
-            return RandomForestRegressor(n_estimators=100)
+        """Get appropriate model based on task type with GPU acceleration support."""
+        if DEVICE == 'cuda':
+            # Use GPU-accelerated models when available
+            try:
+                import xgboost as xgb
+                if self.task_type == 'text_classification':
+                    return Pipeline([
+                        ('tfidf', TfidfVectorizer(max_features=1000)),
+                        ('classifier', xgb.XGBClassifier(n_estimators=100, tree_method='gpu_hist'))
+                    ])
+                elif self.task_type == 'classification':
+                    return xgb.XGBClassifier(n_estimators=100, tree_method='gpu_hist')
+                else:  # regression
+                    return xgb.XGBRegressor(n_estimators=100, tree_method='gpu_hist')
+            except ImportError:
+                logger.info("XGBoost not available, falling back to scikit-learn models")
+                # Fallback to scikit-learn models
+                if self.task_type == 'text_classification':
+                    return Pipeline([
+                        ('tfidf', TfidfVectorizer(max_features=1000)),
+                        ('classifier', RandomForestClassifier(n_estimators=100))
+                    ])
+                elif self.task_type == 'classification':
+                    return RandomForestClassifier(n_estimators=100)
+                else:  # regression
+                    return RandomForestRegressor(n_estimators=100)
+        else:
+            # CPU models
+            if self.task_type == 'text_classification':
+                return Pipeline([
+                    ('tfidf', TfidfVectorizer(max_features=1000)),
+                    ('classifier', RandomForestClassifier(n_estimators=100))
+                ])
+            elif self.task_type == 'classification':
+                return RandomForestClassifier(n_estimators=100)
+            else:  # regression
+                return RandomForestRegressor(n_estimators=100)
     
     def _evaluate_model(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
         """Evaluate model performance based on task type."""
@@ -171,10 +332,17 @@ class UtilityEvaluator:
                 X_train_syn = vectorizer.transform(X_train_syn[text_columns[0]].fillna(''))
                 X_test = vectorizer.transform(X_test[text_columns[0]].fillna(''))
                 
-                # Convert to dense arrays if needed
-                X_train_real = X_train_real.toarray()
-                X_train_syn = X_train_syn.toarray()
-                X_test = X_test.toarray()
+                # Convert to GPU tensors if available for faster computation
+                if DEVICE == 'cuda':
+                    import torch
+                    X_train_real = torch.tensor(X_train_real.toarray(), device='cuda', dtype=torch.float32)
+                    X_train_syn = torch.tensor(X_train_syn.toarray(), device='cuda', dtype=torch.float32)
+                    X_test = torch.tensor(X_test.toarray(), device='cuda', dtype=torch.float32)
+                else:
+                    # Convert to dense arrays if needed
+                    X_train_real = X_train_real.toarray()
+                    X_train_syn = X_train_syn.toarray()
+                    X_test = X_test.toarray()
             
             # Handle non-text columns if any
             other_columns = [col for col in self.input_columns if col not in text_columns]
@@ -184,11 +352,23 @@ class UtilityEvaluator:
                 X_train_syn_other = self.synthetic_data[other_columns].fillna(0).values
                 X_test_other = test_data[other_columns].fillna(0).values
                 
+                # Convert to GPU tensors if available
+                if DEVICE == 'cuda':
+                    import torch
+                    X_train_real_other = torch.tensor(X_train_real_other, device='cuda', dtype=torch.float32)
+                    X_train_syn_other = torch.tensor(X_train_syn_other, device='cuda', dtype=torch.float32)
+                    X_test_other = torch.tensor(X_test_other, device='cuda', dtype=torch.float32)
+                
                 # Combine with text features if they exist
                 if text_columns:
-                    X_train_real = np.hstack([X_train_real, X_train_real_other])
-                    X_train_syn = np.hstack([X_train_syn, X_train_syn_other])
-                    X_test = np.hstack([X_test, X_test_other])
+                    if DEVICE == 'cuda':
+                        X_train_real = torch.cat([X_train_real, X_train_real_other], dim=1)
+                        X_train_syn = torch.cat([X_train_syn, X_train_syn_other], dim=1)
+                        X_test = torch.cat([X_test, X_test_other], dim=1)
+                    else:
+                        X_train_real = np.hstack([X_train_real, X_train_real_other])
+                        X_train_syn = np.hstack([X_train_syn, X_train_syn_other])
+                        X_test = np.hstack([X_test, X_test_other])
                 else:
                     X_train_real = X_train_real_other
                     X_train_syn = X_train_syn_other
@@ -209,15 +389,26 @@ class UtilityEvaluator:
             model_real = self._get_model()
             model_syn = self._get_model()
             
+            # Convert data back to CPU if using GPU tensors for scikit-learn models
+            if DEVICE == 'cuda' and not hasattr(model_real, 'tree_method'):  # Not XGBoost
+                import torch
+                X_train_real_cpu = X_train_real.cpu().numpy()
+                X_train_syn_cpu = X_train_syn.cpu().numpy()
+                X_test_cpu = X_test.cpu().numpy()
+            else:
+                X_train_real_cpu = X_train_real
+                X_train_syn_cpu = X_train_syn
+                X_test_cpu = X_test
+            
             # Train on real data
             logger.info("Training model on real data...")
-            model_real.fit(X_train_real, y_train_real)
-            real_pred = model_real.predict(X_test)
+            model_real.fit(X_train_real_cpu, y_train_real)
+            real_pred = model_real.predict(X_test_cpu)
             
             # Train on synthetic data
             logger.info("Training model on synthetic data...")
-            model_syn.fit(X_train_syn, y_train_syn)
-            syn_pred = model_syn.predict(X_test)
+            model_syn.fit(X_train_syn_cpu, y_train_syn)
+            syn_pred = model_syn.predict(X_test_cpu)
             
             # Get classification reports
             from sklearn.metrics import classification_report

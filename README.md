@@ -7,11 +7,116 @@ SynEval is a comprehensive evaluation framework for assessing the quality of syn
 - **Diversity**: Assesses the variety and uniqueness of the generated data
 - **Privacy**: Analyzes the privacy protection level of the synthetic data
 
+## Installation
+
+### From PyPI (Recommended)
+
+```bash
+pip install syneval
+```
+
+### From Source
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yefyuan/SynEval.git
+cd SynEval
+```
+
+2. Install the package in development mode:
+```bash
+pip install -e .
+```
+
+### Development Installation
+
+For development and testing:
+
+```bash
+pip install -e ".[dev]"
+```
+
+This installs additional development dependencies including pytest, black, flake8, and mypy.
+
+## Quick Start
+
+### Command Line Usage
+
+After installation, you can use SynEval from the command line:
+
+```bash
+syneval \
+    --synthetic synthetic_data.csv \
+    --original original_data.csv \
+    --metadata metadata.json \
+    --dimensions fidelity utility diversity privacy \
+    --utility-input text \
+    --utility-output rating \
+    --output results.json \
+    --plot
+```
+
+### Python API Usage
+
+```python
+import pandas as pd
+from syneval import FidelityEvaluator, UtilityEvaluator, DiversityEvaluator, PrivacyEvaluator
+
+# Load your data
+synthetic_data = pd.read_csv('synthetic_data.csv')
+original_data = pd.read_csv('original_data.csv')
+
+# Define metadata
+metadata = {
+    "columns": {
+        "age": {"sdtype": "numerical"},
+        "rating": {"sdtype": "categorical", "values": [1, 2, 3, 4, 5]},
+        "text": {"sdtype": "text"}
+    },
+    "text_columns": ["text"]
+}
+
+# Run evaluations
+fidelity_evaluator = FidelityEvaluator(synthetic_data, original_data, metadata)
+fidelity_results = fidelity_evaluator.evaluate()
+
+utility_evaluator = UtilityEvaluator(
+    synthetic_data, original_data, metadata,
+    input_columns=["text"], output_columns=["rating"]
+)
+utility_results = utility_evaluator.evaluate()
+
+diversity_evaluator = DiversityEvaluator(synthetic_data, original_data, metadata)
+diversity_results = diversity_evaluator.evaluate()
+
+privacy_evaluator = PrivacyEvaluator(synthetic_data, original_data, metadata)
+privacy_results = privacy_evaluator.evaluate()
+```
+
+### Example
+
+See `examples/basic_usage.py` for a complete working example.
+
+### Troubleshooting Device Issues
+
+If you encounter CUDA/CPU tensor device errors, see `DEVICE_MANAGEMENT_FIX.md` for detailed solutions. The most common fix is to set the environment variable:
+
+```bash
+export CUDA_VISIBLE_DEVICES=""
+```
+
+Or add this at the beginning of your Python script:
+
+```python
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+```
+
 ## Requirements
 
-- Python 3.10+
+- Python 3.8+
 - pandas
-- Additional dependencies will be added as we implement specific evaluation metrics
+- Additional dependencies will be installed automatically
 
 ## Installation
 
@@ -652,4 +757,26 @@ As we implement more evaluation metrics, this README will be updated with additi
 
 ## License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+### MIT License
+
+Copyright (c) 2024 SynEval Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

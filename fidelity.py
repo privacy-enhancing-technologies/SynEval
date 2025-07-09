@@ -9,9 +9,127 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sdv.evaluation.single_table import run_diagnostic, evaluate_quality
 from sdv.metadata import SingleTableMetadata
 import logging
+import os
+import hashlib
+import json
+import pickle
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# GPU acceleration setup
+def setup_gpu_acceleration():
+    """Setup GPU acceleration if available."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return 'cuda'
+        else:
+            return 'cpu'
+    except ImportError:
+        return 'cpu'
+
+# Initialize device as None - will be set when evaluator is created
+DEVICE = None
+
+def compute_dataset_fingerprint(data: pd.DataFrame, metadata: Dict) -> str:
+    """
+    Compute a unique fingerprint for the dataset to identify changes.
+    
+    Args:
+        data: DataFrame to fingerprint
+        metadata: Metadata dictionary
+    
+    Returns:
+        str: SHA256 hash of dataset characteristics
+    """
+    # Create a fingerprint based on data characteristics
+    fingerprint_data = {
+        'shape': data.shape,
+        'columns': list(data.columns),
+        'dtypes': {col: str(dtype) for col, dtype in data.dtypes.items()},
+        'metadata_columns': list(metadata.get('columns', {}).keys()),
+        'sample_hash': hashlib.sha256(
+            data.head(1000).to_string().encode()
+        ).hexdigest()[:16],  # First 1000 rows hash
+        'total_hash': hashlib.sha256(
+            data.to_string().encode()
+        ).hexdigest()[:16]   # Full dataset hash
+    }
+    
+    # Convert to string and hash
+    fingerprint_str = json.dumps(fingerprint_data, sort_keys=True)
+    return hashlib.sha256(fingerprint_str.encode()).hexdigest()
+
+class SmartCache:
+    """Smart cache system with dataset fingerprinting."""
+    
+    def __init__(self, cache_dir: str = "./cache"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+        self.fingerprint_file = self.cache_dir / "dataset_fingerprints.json"
+        self.fingerprints = self._load_fingerprints()
+    
+    def _load_fingerprints(self) -> Dict:
+        """Load dataset fingerprints."""
+        if self.fingerprint_file.exists():
+            try:
+                with open(self.fingerprint_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logging.warning(f"Error loading fingerprints: {str(e)}")
+        return {}
+    
+    def _save_fingerprints(self):
+        """Save dataset fingerprints."""
+        try:
+            with open(self.fingerprint_file, 'w') as f:
+                json.dump(self.fingerprints, f, indent=2)
+        except Exception as e:
+            logging.warning(f"Error saving fingerprints: {str(e)}")
+    
+    def get_cache_path(self, cache_type: str, column: str = None) -> Path:
+        """Get cache file path."""
+        if column:
+            return self.cache_dir / f"{cache_type}_{column}.pkl"
+        return self.cache_dir / f"{cache_type}.pkl"
+    
+    def is_valid_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> bool:
+        """Check if cache is valid for current dataset."""
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        return self.fingerprints.get(cache_key) == dataset_fingerprint
+    
+    def load_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> Optional[Dict]:
+        """Load cache if valid."""
+        if not self.is_valid_cache(cache_type, dataset_fingerprint, column):
+            return None
+        
+        cache_path = self.get_cache_path(cache_type, column)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                logging.warning(f"Error loading cache {cache_type}: {str(e)}")
+        return None
+    
+    def save_cache(self, cache_type: str, dataset_fingerprint: str, data: Dict, column: str = None):
+        """Save cache with fingerprint."""
+        cache_path = self.get_cache_path(cache_type, column)
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        
+        try:
+            with open(cache_path, 'wb') as f:
+                pickle.dump(data, f)
+            
+            # Update fingerprint
+            self.fingerprints[cache_key] = dataset_fingerprint
+            self._save_fingerprints()
+            
+            logging.info(f"Saved cache for {cache_type}")
+        except Exception as e:
+            logging.warning(f"Error saving cache {cache_type}: {str(e)}")
 
 class FidelityEvaluator:
     def __init__(self, 
@@ -31,6 +149,22 @@ class FidelityEvaluator:
         self.metadata = metadata
         self.text_columns = self._get_text_columns()
         self.logger = logging.getLogger(__name__)
+        
+        # Initialize smart cache
+        self.cache = SmartCache('./cache')
+        
+        # Compute dataset fingerprints
+        self.original_fingerprint = compute_dataset_fingerprint(original_data, metadata)
+        self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
+        
+        # Setup GPU acceleration only when evaluator is created
+        global DEVICE
+        if DEVICE is None:
+            DEVICE = setup_gpu_acceleration()
+            if DEVICE == 'cuda':
+                self.logger.info("GPU acceleration available - using CUDA")
+            else:
+                self.logger.info("GPU not available - using CPU")
         
     def _get_text_columns(self) -> List[str]:
         """Get list of text columns from metadata."""
@@ -189,16 +323,26 @@ class FidelityEvaluator:
                 'synthetic_std': synthetic_word_counts.std()
             }
             
-            # Keyword analysis using TF-IDF
+            # Keyword analysis using TF-IDF with GPU acceleration
             try:
                 vectorizer = TfidfVectorizer(max_features=20, stop_words='english')
                 original_tfidf = vectorizer.fit_transform(self.original_data[col].fillna(''))
                 synthetic_tfidf = vectorizer.transform(self.synthetic_data[col].fillna(''))
                 
+                # Convert to GPU tensors if available for faster computation
+                if DEVICE == 'cuda':
+                    import torch
+                    original_scores = torch.tensor(original_tfidf.mean(axis=0).A1, device='cuda')
+                    synthetic_scores = torch.tensor(synthetic_tfidf.mean(axis=0).A1, device='cuda')
+                    # Convert back to CPU for further processing
+                    original_scores = original_scores.cpu().numpy()
+                    synthetic_scores = synthetic_scores.cpu().numpy()
+                else:
+                    original_scores = original_tfidf.mean(axis=0).A1
+                    synthetic_scores = synthetic_tfidf.mean(axis=0).A1
+                
                 # Get top keywords for both datasets
                 original_keywords = vectorizer.get_feature_names_out()
-                original_scores = original_tfidf.mean(axis=0).A1
-                synthetic_scores = synthetic_tfidf.mean(axis=0).A1
                 
                 # Sort keywords by TF-IDF scores
                 original_keyword_scores = sorted(zip(original_keywords, original_scores), 
@@ -325,22 +469,48 @@ class FidelityEvaluator:
                 else:
                     range_coverage = 0
                 
-                # Calculate distribution similarity using histogram comparison
+                # Calculate distribution similarity using histogram comparison with GPU acceleration
                 bins = min(50, len(orig_data.unique()), len(syn_data.unique()))
                 if bins > 1:
-                    orig_hist, _ = np.histogram(orig_data, bins=bins, density=True)
-                    syn_hist, _ = np.histogram(syn_data, bins=bins, density=True)
-                    
-                    # Normalize histograms
-                    orig_hist = orig_hist / (orig_hist.sum() + 1e-10)
-                    syn_hist = syn_hist / (syn_hist.sum() + 1e-10)
-                    
-                    # Calculate KL divergence
-                    kl_div = np.sum(orig_hist * np.log((orig_hist + 1e-10) / (syn_hist + 1e-10)))
-                    
-                    # Calculate histogram intersection similarity
-                    intersection = np.minimum(orig_hist, syn_hist)
-                    histogram_similarity = np.sum(intersection)
+                    if DEVICE == 'cuda':
+                        import torch
+                        # Convert to GPU tensors for faster computation
+                        orig_tensor = torch.tensor(orig_data.values, device='cuda', dtype=torch.float32)
+                        syn_tensor = torch.tensor(syn_data.values, device='cuda', dtype=torch.float32)
+                        
+                        # Calculate histograms on GPU
+                        orig_hist = torch.histc(orig_tensor, bins=bins, min=orig_tensor.min(), max=orig_tensor.max())
+                        syn_hist = torch.histc(syn_tensor, bins=bins, min=syn_tensor.min(), max=syn_tensor.max())
+                        
+                        # Normalize histograms
+                        orig_hist = orig_hist / (orig_hist.sum() + 1e-10)
+                        syn_hist = syn_hist / (syn_hist.sum() + 1e-10)
+                        
+                        # Calculate KL divergence on GPU
+                        kl_div = torch.sum(orig_hist * torch.log((orig_hist + 1e-10) / (syn_hist + 1e-10)))
+                        
+                        # Calculate histogram intersection similarity on GPU
+                        intersection = torch.minimum(orig_hist, syn_hist)
+                        histogram_similarity = torch.sum(intersection)
+                        
+                        # Convert back to CPU
+                        kl_div = kl_div.cpu().numpy()
+                        histogram_similarity = histogram_similarity.cpu().numpy()
+                    else:
+                        # CPU fallback
+                        orig_hist, _ = np.histogram(orig_data, bins=bins, density=True)
+                        syn_hist, _ = np.histogram(syn_data, bins=bins, density=True)
+                        
+                        # Normalize histograms
+                        orig_hist = orig_hist / (orig_hist.sum() + 1e-10)
+                        syn_hist = syn_hist / (syn_hist.sum() + 1e-10)
+                        
+                        # Calculate KL divergence
+                        kl_div = np.sum(orig_hist * np.log((orig_hist + 1e-10) / (syn_hist + 1e-10)))
+                        
+                        # Calculate histogram intersection similarity
+                        intersection = np.minimum(orig_hist, syn_hist)
+                        histogram_similarity = np.sum(intersection)
                 else:
                     kl_div = float('inf')
                     histogram_similarity = 0

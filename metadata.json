@@ -1,0 +1,42 @@
+{
+  "columns": {
+    "rating": {
+      "sdtype": "categorical",
+      "values": [1.0, 2.0, 3.0, 4.0, 5.0]
+    },
+    "title": {
+      "sdtype": "text"
+    },
+    "text": {
+      "sdtype": "text"
+    },
+    "asin": {
+      "sdtype": "text",
+      "pii": true
+    },
+    "parent_asin": {
+      "sdtype": "text",
+      "pii": true
+    },
+    "user_id": {
+      "sdtype": "text",
+      "pii": true
+    },
+    "timestamp": {
+      "sdtype": "datetime"
+    },
+    "helpful_vote": {
+      "sdtype": "numerical"
+    },
+    "verified_purchase": {
+      "sdtype": "boolean",
+      "values": [true, false]
+    }
+  },
+  "text_columns": ["title", "text"],
+  "utility": {
+    "input_columns": ["text"],
+    "output_columns": ["rating"],
+    "task_type": "classification"
+  }
+}

@@ -13,13 +13,22 @@ from sklearn.metrics.pairwise import cosine_distances
 import networkx as nx
 from flair.models import TextClassifier
 from flair.data import Sentence
+import torch
 import logging
 import json
 import os
+import hashlib
+from pathlib import Path
 from tqdm import tqdm
+import pickle
+from scipy.spatial.distance import pdist, squareform
+from scipy.sparse.csgraph import minimum_spanning_tree
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Device management for Flair models
+import torch
 
 # Download required NLTK data
 try:
@@ -30,6 +39,121 @@ try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
     nltk.download('punkt', quiet=True)
+
+def get_device():
+    """
+    Get the best available device (CUDA if available, otherwise CPU).
+    """
+    if torch.cuda.is_available():
+        return torch.device('cuda')
+    else:
+        return torch.device('cpu')
+
+def ensure_tensor_device(tensor, device):
+    """
+    Ensure a tensor is on the specified device.
+    """
+    if tensor is not None and tensor.device != device:
+        return tensor.to(device)
+    return tensor
+
+def compute_dataset_fingerprint(data: pd.DataFrame, metadata: Dict) -> str:
+    """
+    Compute a unique fingerprint for the dataset to identify changes.
+    
+    Args:
+        data: DataFrame to fingerprint
+        metadata: Metadata dictionary
+    
+    Returns:
+        str: SHA256 hash of dataset characteristics
+    """
+    # Create a fingerprint based on data characteristics
+    fingerprint_data = {
+        'shape': data.shape,
+        'columns': list(data.columns),
+        'dtypes': {col: str(dtype) for col, dtype in data.dtypes.items()},
+        'metadata_columns': list(metadata.get('columns', {}).keys()),
+        'sample_hash': hashlib.sha256(
+            data.head(1000).to_string().encode()
+        ).hexdigest()[:16],  # First 1000 rows hash
+        'total_hash': hashlib.sha256(
+            data.to_string().encode()
+        ).hexdigest()[:16]   # Full dataset hash
+    }
+    
+    # Convert to string and hash
+    fingerprint_str = json.dumps(fingerprint_data, sort_keys=True)
+    return hashlib.sha256(fingerprint_str.encode()).hexdigest()
+
+class SmartCache:
+    """Smart cache system with dataset fingerprinting."""
+    
+    def __init__(self, cache_dir: str = "./cache"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+        self.fingerprint_file = self.cache_dir / "dataset_fingerprints.json"
+        self.fingerprints = self._load_fingerprints()
+    
+    def _load_fingerprints(self) -> Dict:
+        """Load dataset fingerprints."""
+        if self.fingerprint_file.exists():
+            try:
+                with open(self.fingerprint_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Error loading fingerprints: {str(e)}")
+        return {}
+    
+    def _save_fingerprints(self):
+        """Save dataset fingerprints."""
+        try:
+            with open(self.fingerprint_file, 'w') as f:
+                json.dump(self.fingerprints, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Error saving fingerprints: {str(e)}")
+    
+    def get_cache_path(self, cache_type: str, column: str = None) -> Path:
+        """Get cache file path."""
+        if column:
+            return self.cache_dir / f"{cache_type}_{column}.pkl"
+        return self.cache_dir / f"{cache_type}.pkl"
+    
+    def is_valid_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> bool:
+        """Check if cache is valid for current dataset."""
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        return self.fingerprints.get(cache_key) == dataset_fingerprint
+    
+    def load_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> Optional[Dict]:
+        """Load cache if valid."""
+        if not self.is_valid_cache(cache_type, dataset_fingerprint, column):
+            return None
+        
+        cache_path = self.get_cache_path(cache_type, column)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                logger.warning(f"Error loading cache {cache_type}: {str(e)}")
+        return None
+    
+    def save_cache(self, cache_type: str, dataset_fingerprint: str, data: Dict, column: str = None):
+        """Save cache with fingerprint."""
+        cache_path = self.get_cache_path(cache_type, column)
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        
+        try:
+            with open(cache_path, 'wb') as f:
+                pickle.dump(data, f)
+            
+            # Update fingerprint
+            self.fingerprints[cache_key] = dataset_fingerprint
+            self._save_fingerprints()
+            
+            logger.info(f"Saved cache for {cache_type}")
+        except Exception as e:
+            logger.warning(f"Error saving cache {cache_type}: {str(e)}")
 
 class DiversityEvaluator:
     def __init__(self, 
@@ -51,32 +175,25 @@ class DiversityEvaluator:
         self.metadata = metadata
         self.text_columns = self._get_text_columns()
         self.structured_columns = self._get_structured_columns()
-        self.cache_dir = cache_dir
-        os.makedirs(cache_dir, exist_ok=True)
         
-    def _get_cache_path(self, column: str) -> str:
-        """Get the cache file path for a specific column."""
-        return os.path.join(self.cache_dir, f"real_text_diversity_{column}.json")
+        # Initialize smart cache
+        self.cache = SmartCache(cache_dir)
         
-    def _load_cached_results(self, column: str) -> Optional[Dict]:
-        """Load cached results for a specific column if they exist."""
-        cache_path = self._get_cache_path(column)
-        if os.path.exists(cache_path):
-            try:
-                with open(cache_path, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logger.warning(f"Error loading cache for {column}: {str(e)}")
-        return None
+        # Compute dataset fingerprints
+        self.original_fingerprint = compute_dataset_fingerprint(original_data, metadata)
+        self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
         
-    def _save_cached_results(self, column: str, results: Dict):
-        """Save results to cache for a specific column."""
-        cache_path = self._get_cache_path(column)
-        try:
-            with open(cache_path, 'w') as f:
-                json.dump(results, f)
-        except Exception as e:
-            logger.warning(f"Error saving cache for {column}: {str(e)}")
+        # Device management
+        self.device = get_device()
+        logger.info(f"Using device: {self.device}")
+        
+        # GPU acceleration settings
+        if self.device.type == 'cuda':
+            self.batch_size = 2000  # Larger batches for GPU
+            logger.info("GPU acceleration enabled")
+        else:
+            self.batch_size = 1000  # Smaller batches for CPU
+            logger.info("CPU processing mode")
         
     def _get_text_columns(self) -> List[str]:
         """Get list of text columns from metadata."""
@@ -432,7 +549,7 @@ class DiversityEvaluator:
                 }
                 
                 # Try to load cached results for real data
-                cached_results = self._load_cached_results(col)
+                cached_results = self.cache.load_cache("text_diversity", self.original_fingerprint, col)
                 if cached_results is not None:
                     logger.info(f"Using cached results for real data column: {col}")
                     results['real'][col] = cached_results
@@ -455,7 +572,7 @@ class DiversityEvaluator:
                     
                     results['real'][col] = real_results
                     # Cache the results
-                    self._save_cached_results(col, real_results)
+                    self.cache.save_cache("text_diversity", self.original_fingerprint, real_results, col)
                 
             except Exception as e:
                 logger.error(f"Error evaluating text diversity for column {col}: {str(e)}")
@@ -473,212 +590,392 @@ class DiversityEvaluator:
         return results
     
     def _evaluate_lexical_diversity(self, data: pd.DataFrame, text_column: str) -> Dict:
-        """Evaluate lexical diversity using n-gram analysis."""
-        stop_words = set(stopwords.words("english"))
-        tokenizer = RegexpTokenizer(r"[A-Za-z]+(?:'[A-Za-z]+)*")
-        
-        def tokenize_and_remove_stopwords(text: str):
-            tokens = tokenizer.tokenize(str(text).lower())
-            return [t for t in tokens if t not in stop_words]
-        
-        df = data.copy()
-        df["tokens"] = df[text_column].apply(tokenize_and_remove_stopwords)
-        
-        results = {}
-        all_token_lists = df["tokens"].tolist()
-        
-        for n in tqdm(range(1, 6), desc="Calculating n-grams", leave=False):
-            ngrams_flat = []
-            for tokens in all_token_lists:
-                ngrams_flat.extend(nltk.ngrams(tokens, n) if n > 1 else tokens)
+        """Evaluate lexical diversity using n-gram analysis with full dataset."""
+        try:
+            # Check cache first
+            cached_result = self.cache.load_cache("lexical_diversity", self.original_fingerprint, text_column)
+            if cached_result is not None:
+                logger.info(f"Using cached lexical diversity results for {text_column}")
+                return cached_result
             
-            total = len(ngrams_flat)
-            counts = Counter(ngrams_flat)
-            unique = len(counts)
-            ratio = unique / total if total else 0
-            entropy = -sum((c / total) * math.log2(c / total) for c in counts.values())
-            norm_ent = entropy / math.log2(unique) if unique > 1 else 0
+            stop_words = set(stopwords.words("english"))
+            tokenizer = RegexpTokenizer(r"[A-Za-z]+(?:'[A-Za-z]+)*")
             
-            results[f"{n}-gram"] = {
-                'total': total,
-                'unique': unique,
-                'unique_ratio': ratio,
-                'entropy': entropy,
-                'normalized_entropy': norm_ent
+            def tokenize_and_remove_stopwords(text: str):
+                tokens = tokenizer.tokenize(str(text).lower())
+                return [t for t in tokens if t not in stop_words]
+            
+            df = data.copy()
+            df["tokens"] = df[text_column].apply(tokenize_and_remove_stopwords)
+            
+            # Filter out empty token lists
+            df = df[df["tokens"].apply(len) > 0].reset_index(drop=True)
+            
+            if len(df) == 0:
+                logger.warning("No valid text data for lexical analysis")
+                result = {
+                    'sample_size': 0,
+                    'error': 'No valid text data'
+                }
+                self.cache.save_cache("lexical_diversity", self.original_fingerprint, result, text_column)
+                return result
+            
+            logger.info(f"Processing {len(df)} samples for lexical diversity (no sampling)")
+            
+            results = {}
+            all_token_lists = df["tokens"].tolist()
+            
+            for n in tqdm(range(1, 6), desc="Calculating n-grams"):
+                try:
+                    ngrams_flat = []
+                    for tokens in all_token_lists:
+                        ngrams_flat.extend(nltk.ngrams(tokens, n) if n > 1 else tokens)
+                    
+                    total = len(ngrams_flat)
+                    if total == 0:
+                        results[f"{n}-gram"] = {
+                            'total': 0,
+                            'unique': 0,
+                            'unique_ratio': 0.0,
+                            'entropy': 0.0,
+                            'normalized_entropy': 0.0
+                        }
+                        continue
+                    
+                    counts = Counter(ngrams_flat)
+                    unique = len(counts)
+                    ratio = unique / total if total else 0
+                    entropy = -sum((c / total) * math.log2(c / total) for c in counts.values())
+                    norm_ent = entropy / math.log2(unique) if unique > 1 else 0
+                    
+                    results[f"{n}-gram"] = {
+                        'total': total,
+                        'unique': unique,
+                        'unique_ratio': ratio,
+                        'entropy': entropy,
+                        'normalized_entropy': norm_ent
+                    }
+                except Exception as e:
+                    logger.error(f"Error calculating {n}-gram metrics: {str(e)}")
+                    results[f"{n}-gram"] = {
+                        'total': 0,
+                        'unique': 0,
+                        'unique_ratio': 0.0,
+                        'entropy': 0.0,
+                        'normalized_entropy': 0.0,
+                        'error': str(e)
+                    }
+            
+            results['sample_size'] = len(df)
+            
+            # Cache the results
+            self.cache.save_cache("lexical_diversity", self.original_fingerprint, results, text_column)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in lexical diversity evaluation: {str(e)}")
+            return {
+                'sample_size': 0,
+                'error': str(e)
             }
-        
-        return results
     
     def _evaluate_semantic_diversity(self, data: pd.DataFrame, text_column: str) -> Dict:
-        """Evaluate semantic diversity using word embeddings and MST."""
-        stop_words = set(stopwords.words("english"))
-        
-        def rm_sw_tok(text: str):
-            tokens = word_tokenize(str(text).lower())
-            return [w for w in tokens if w not in stop_words]
-        
-        df = data.copy()
-        df["tokens"] = df[text_column].apply(rm_sw_tok)
-        
-        # Train Word2Vec model
-        logger.info("Training Word2Vec model...")
-        w2v = Word2Vec(sentences=df["tokens"], vector_size=100,
-                      window=5, min_count=1, workers=4)
-        
-        def sent_vec(tokens):
-            vecs = [w2v.wv[t] for t in tokens if t in w2v.wv]
-            return np.mean(vecs, axis=0) if vecs else np.zeros(w2v.vector_size)
-        
-        logger.info("Calculating embeddings...")
-        df["embedding"] = df["tokens"].apply(sent_vec)
-        embeddings = np.stack(df["embedding"].values)
-        
-        logger.info("Calculating distances...")
-        # Calculate distances in batches to avoid memory issues
-        batch_size = 1000
-        n = len(df)
-        dist_m = np.zeros((n, n))
-        
-        for i in tqdm(range(0, n, batch_size), desc="Calculating distances"):
-            end_i = min(i + batch_size, n)
-            for j in range(0, n, batch_size):
-                end_j = min(j + batch_size, n)
-                dist_m[i:end_i, j:end_j] = cosine_distances(embeddings[i:end_i], embeddings[j:end_j])
-        
-        # Construct MST using sparse matrix for efficiency
-        logger.info("Constructing MST...")
-        G = nx.Graph()
-        G.add_nodes_from(range(n))
-        
-        # Add edges in batches
-        batch_size = 1000
-        total_edges = (n * (n - 1)) // 2
-        edges_added = 0
-        
-        with tqdm(total=total_edges, desc="Building graph") as pbar:
-            for i in range(n):
-                for j in range(i + 1, n):
-                    G.add_edge(i, j, weight=dist_m[i, j])
-                    edges_added += 1
-                    if edges_added % 1000 == 0:  # Update progress every 1000 edges
-                        pbar.update(1000)
+        """Evaluate semantic diversity using word embeddings and MST with full dataset."""
+        try:
+            # Check cache first
+            cache_key = f"semantic_diversity_{text_column}"
+            cached_result = self.cache.load_cache("semantic_diversity", self.original_fingerprint, text_column)
+            if cached_result is not None:
+                logger.info(f"Using cached semantic diversity results for {text_column}")
+                return cached_result
             
-            # Update remaining edges
-            if edges_added % 1000 != 0:
-                pbar.update(edges_added % 1000)
-        
-        # Use a more efficient MST algorithm with progress tracking
-        logger.info("Computing minimum spanning tree...")
-        # Convert graph to edge list for faster processing
-        edges = [(u, v, d['weight']) for u, v, d in G.edges(data=True)]
-        edges.sort(key=lambda x: x[2])  # Sort by weight
-        
-        # Initialize disjoint set for Union-Find
-        parent = list(range(n))
-        rank = [0] * n
-        
-        def find(x):
-            if parent[x] != x:
-                parent[x] = find(parent[x])
-            return parent[x]
-        
-        def union(x, y):
-            root_x = find(x)
-            root_y = find(y)
-            if root_x == root_y:
-                return
-            if rank[root_x] < rank[root_y]:
-                parent[root_x] = root_y
-            elif rank[root_x] > rank[root_y]:
-                parent[root_y] = root_x
+            stop_words = set(stopwords.words("english"))
+            
+            def rm_sw_tok(text: str):
+                tokens = word_tokenize(str(text).lower())
+                return [w for w in tokens if w not in stop_words]
+            
+            df = data.copy()
+            df["tokens"] = df[text_column].apply(rm_sw_tok)
+            
+            # Filter out empty token lists
+            df = df[df["tokens"].apply(len) > 0].reset_index(drop=True)
+            
+            n = len(df)
+            if n < 2:
+                logger.warning("Not enough samples for semantic diversity evaluation")
+                result = {
+                    'total_mst_weight': 0.0,
+                    'average_edge_weight': 0.0,
+                    'distinct_nodes': n,
+                    'distinct_ratio': 1.0 if n > 0 else 0.0,
+                    'sample_size': n
+                }
+                self.cache.save_cache("semantic_diversity", self.original_fingerprint, result, text_column)
+                return result
+            
+            logger.info(f"Processing {n} samples for semantic diversity (no sampling)")
+            
+            # Train Word2Vec model
+            logger.info("Training Word2Vec model...")
+            w2v = Word2Vec(sentences=df["tokens"], vector_size=100,
+                          window=5, min_count=1, workers=4)
+            
+            def sent_vec(tokens):
+                vecs = [w2v.wv[t] for t in tokens if t in w2v.wv]
+                return np.mean(vecs, axis=0) if vecs else np.zeros(w2v.vector_size)
+            
+            logger.info("Calculating embeddings...")
+            df["embedding"] = df["tokens"].apply(sent_vec)
+            embeddings = np.stack(df["embedding"].values)
+            
+            # Move to GPU if available
+            if self.device.type == 'cuda':
+                embeddings = torch.tensor(embeddings, device=self.device)
+                logger.info("Using GPU for distance calculations")
+                
+                # Calculate distances in batches on GPU
+                batch_size = self.batch_size
+                n_batches = (n + batch_size - 1) // batch_size
+                distances = []
+                
+                for i in tqdm(range(n_batches), desc="Calculating distances (GPU)"):
+                    start_idx = i * batch_size
+                    end_idx = min((i + 1) * batch_size, n)
+                    batch_embeddings = embeddings[start_idx:end_idx]
+                    
+                    # Calculate cosine distances for this batch
+                    batch_distances = []
+                    for j in range(n_batches):
+                        j_start = j * batch_size
+                        j_end = min((j + 1) * batch_size, n)
+                        j_embeddings = embeddings[j_start:j_end]
+                        
+                        # Calculate cosine distances
+                        cos_sim = torch.mm(batch_embeddings, j_embeddings.T)
+                        batch_dist = 1 - cos_sim
+                        batch_distances.append(batch_dist.cpu().numpy())
+                    
+                    distances.extend(batch_distances)
+                
+                # Convert to full distance matrix
+                dist_matrix = np.zeros((n, n))
+                for i in range(n_batches):
+                    for j in range(n_batches):
+                        start_i = i * batch_size
+                        end_i = min((i + 1) * batch_size, n)
+                        start_j = j * batch_size
+                        end_j = min((j + 1) * batch_size, n)
+                        
+                        if i < len(distances) and j < len(distances[i]):
+                            dist_matrix[start_i:end_i, start_j:end_j] = distances[i][:, :end_j-start_j]
+                
+                # Move back to CPU for MST calculation
+                dist_matrix = torch.tensor(dist_matrix, device='cpu').numpy()
             else:
-                parent[root_y] = root_x
-                rank[root_x] += 1
-        
-        # Kruskal's algorithm with progress tracking
-        mst_edges = []
-        total_edges = len(edges)
-        
-        with tqdm(total=total_edges, desc="Computing MST") as pbar:
-            for u, v, w in edges:
-                if find(u) != find(v):
-                    mst_edges.append((u, v, w))
-                    union(u, v)
-                pbar.update(1)
-                if len(mst_edges) == n - 1:  # MST is complete
-                    break
-        
-        # Create MST graph from edges
-        mst = nx.Graph()
-        mst.add_nodes_from(range(n))
-        mst.add_weighted_edges_from(mst_edges)
-        
-        logger.info("Calculating final metrics...")
-        # Calculate metrics
-        tol = 1e-6
-        wts = [0.0 if abs(d["weight"]) < tol else d["weight"]
-               for _, _, d in mst.edges(data=True)]
-        total_w = sum(wts)
-        nz_wts = [w for w in wts if w > 0]
-        avg_nz = sum(nz_wts) / len(nz_wts) if nz_wts else 0
-        
-        # Calculate distinct nodes more efficiently
-        logger.info("Calculating distinct nodes...")
-        rounded_embs = np.round(embeddings, decimals=6)
-        distinct_nodes = len(np.unique(rounded_embs, axis=0))
-        ratio_dist = distinct_nodes / n if n else 0
-        
-        return {
-            'total_mst_weight': total_w,
-            'average_edge_weight': avg_nz,
-            'distinct_nodes': distinct_nodes,
-            'distinct_ratio': ratio_dist
-        }
+                # CPU processing
+                logger.info("Using CPU for distance calculations")
+                distances = pdist(embeddings, metric='cosine')
+                dist_matrix = squareform(distances)
+            
+            # Calculate MST using scipy's efficient implementation
+            logger.info("Computing minimum spanning tree...")
+            mst_matrix = minimum_spanning_tree(dist_matrix)
+            
+            # Extract MST edges and weights
+            mst_edges = []
+            for i in range(n):
+                for j in range(i+1, n):
+                    weight = mst_matrix[i, j]
+                    if weight > 0:
+                        mst_edges.append((i, j, weight))
+            
+            logger.info(f"Found {len(mst_edges)} MST edges")
+            
+            # Calculate metrics
+            if mst_edges:
+                weights = [edge[2] for edge in mst_edges]
+                total_w = sum(weights)
+                avg_w = total_w / len(weights)
+            else:
+                total_w = 0.0
+                avg_w = 0.0
+            
+            # Calculate distinct nodes more efficiently
+            logger.info("Calculating distinct nodes...")
+            rounded_embs = np.round(embeddings.cpu().numpy() if hasattr(embeddings, 'cpu') else embeddings, decimals=6)
+            distinct_nodes = len(np.unique(rounded_embs, axis=0))
+            ratio_dist = distinct_nodes / n if n else 0
+            
+            result = {
+                'total_mst_weight': float(total_w),
+                'average_edge_weight': float(avg_w),
+                'distinct_nodes': distinct_nodes,
+                'distinct_ratio': ratio_dist,
+                'sample_size': n,
+                'device_used': str(self.device)
+            }
+            
+            # Cache the results
+            self.cache.save_cache("semantic_diversity", self.original_fingerprint, result, text_column)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in semantic diversity evaluation: {str(e)}")
+            return {
+                'total_mst_weight': 0.0,
+                'average_edge_weight': 0.0,
+                'distinct_nodes': 0,
+                'distinct_ratio': 0.0,
+                'error': str(e)
+            }
     
     def _evaluate_sentiment_diversity(self, data: pd.DataFrame, text_column: str) -> Dict:
-        """Evaluate sentiment diversity across rating levels."""
-        stop_words = set(stopwords.words("english"))
-        
-        def rm_sw_tok(text: str):
-            toks = word_tokenize(str(text).lower())
-            return [w for w in toks if w not in stop_words]
-        
-        df = data.copy()
-        df = df[df[text_column].str.strip().astype(bool)].dropna(subset=[text_column])
-        df["cleaned_text"] = df[text_column].apply(lambda t: " ".join(rm_sw_tok(t)))
-        
-        # Load sentiment classifier
-        clf = TextClassifier.load("en-sentiment")
-        
-        def classify(text):
-            s = Sentence(text)
-            clf.predict(s)
-            if not s.labels:
-                return "Neutral"
-            return "Positive" if s.labels[0].value == "POSITIVE" else "Negative"
-        
-        logger.info("Classifying sentiments...")
-        df["Sentiment Category"] = df["cleaned_text"].apply(classify)
-        
-        # Calculate sentiment distribution
-        counts = (df.groupby("rating")["Sentiment Category"]
-                 .value_counts(normalize=True).unstack().fillna(0))
-        ratings = sorted(df["rating"].unique())
-        pos = counts.get("Positive", pd.Series(0, index=ratings))
-        actual_pos = [pos.get(r, 0) for r in ratings]
-        
-        # Calculate deviation from ideal distribution
-        ideal = {1: 0.0, 2: 0.25, 3: 0.5, 4: 0.75, 5: 1.0}
-        ideal_pos = [ideal.get(r, (r - 1) / 4) for r in ratings]
-        
-        diffs = [abs(a - b) for a, b in zip(actual_pos, ideal_pos)]
-        D_sen = sum(1 - d for d in diffs) / len(ratings)
-        
-        return {
-            'sentiment_by_rating': dict(zip(ratings, actual_pos)),
-            'ideal_sentiment': dict(zip(ratings, ideal_pos)),
-            'sentiment_alignment_score': D_sen
-        }
+        """Evaluate sentiment diversity across rating levels with full dataset."""
+        try:
+            # Check cache first
+            cached_result = self.cache.load_cache("sentiment_diversity", self.original_fingerprint, text_column)
+            if cached_result is not None:
+                logger.info(f"Using cached sentiment diversity results for {text_column}")
+                return cached_result
+            
+            stop_words = set(stopwords.words("english"))
+            
+            def rm_sw_tok(text: str):
+                toks = word_tokenize(str(text).lower())
+                return [w for w in toks if w not in stop_words]
+            
+            df = data.copy()
+            df = df[df[text_column].str.strip().astype(bool)].dropna(subset=[text_column])
+            
+            if len(df) == 0:
+                logger.warning("No valid text data for sentiment analysis")
+                result = {
+                    'sentiment_by_rating': {},
+                    'ideal_sentiment': {},
+                    'sentiment_alignment_score': 0.0,
+                    'sample_size': 0
+                }
+                self.cache.save_cache("sentiment_diversity", self.original_fingerprint, result, text_column)
+                return result
+            
+            logger.info(f"Processing {len(df)} samples for sentiment diversity (no sampling)")
+            
+            df["cleaned_text"] = df[text_column].apply(lambda t: " ".join(rm_sw_tok(t)))
+            
+            # Check if rating column exists
+            if 'rating' not in df.columns:
+                logger.warning("Rating column not found, using default sentiment analysis")
+                # Detect best available device
+                device = get_device()
+                logger.info(f"Using device: {device} for sentiment classification")
+                
+                # Load sentiment classifier and move to device
+                clf = TextClassifier.load("en-sentiment")
+                clf = clf.to(device)  # Move to device (compatible with all Flair versions)
+                
+                def classify(text):
+                    try:
+                        s = Sentence(text)
+                        # Predict without device parameter (compatible with all Flair versions)
+                        clf.predict(s)
+                        if not s.labels:
+                            return "Neutral"
+                        return "Positive" if s.labels[0].value == "POSITIVE" else "Negative"
+                    except Exception as e:
+                        logger.warning(f"Error classifying text: {str(e)}")
+                        return "Neutral"
+                
+                logger.info("Classifying sentiments...")
+                df["Sentiment Category"] = df["cleaned_text"].apply(classify)
+                
+                # Calculate basic sentiment distribution
+                sentiment_counts = df["Sentiment Category"].value_counts(normalize=True)
+                
+                result = {
+                    'sentiment_distribution': sentiment_counts.to_dict(),
+                    'sentiment_alignment_score': 0.0,  # No rating-based alignment
+                    'sample_size': len(df)
+                }
+                
+                # Cache the results
+                self.cache.save_cache("sentiment_diversity", self.original_fingerprint, result, text_column)
+                return result
+            
+            # Detect best available device
+            device = get_device()
+            logger.info(f"Using device: {device} for sentiment classification")
+            
+            # Load sentiment classifier and move to device
+            clf = TextClassifier.load("en-sentiment")
+            clf = clf.to(device)  # Move to device (compatible with all Flair versions)
+            
+            def classify(text):
+                try:
+                    s = Sentence(text)
+                    # Predict without device parameter (compatible with all Flair versions)
+                    clf.predict(s)
+                    if not s.labels:
+                        return "Neutral"
+                    return "Positive" if s.labels[0].value == "POSITIVE" else "Negative"
+                except Exception as e:
+                    logger.warning(f"Error classifying text: {str(e)}")
+                    return "Neutral"
+            
+            logger.info("Classifying sentiments...")
+            df["Sentiment Category"] = df["cleaned_text"].apply(classify)
+            
+            # Calculate sentiment distribution
+            try:
+                counts = (df.groupby("rating")["Sentiment Category"]
+                         .value_counts(normalize=True).unstack().fillna(0))
+                ratings = sorted(df["rating"].unique())
+                pos = counts.get("Positive", pd.Series(0, index=ratings))
+                actual_pos = [pos.get(r, 0) for r in ratings]
+                
+                # Calculate deviation from ideal distribution
+                ideal = {1: 0.0, 2: 0.25, 3: 0.5, 4: 0.75, 5: 1.0}
+                ideal_pos = [ideal.get(r, (r - 1) / 4) for r in ratings]
+                
+                diffs = [abs(a - b) for a, b in zip(actual_pos, ideal_pos)]
+                D_sen = sum(1 - d for d in diffs) / len(ratings) if ratings else 0
+                
+                result = {
+                    'sentiment_by_rating': dict(zip(ratings, actual_pos)),
+                    'ideal_sentiment': dict(zip(ratings, ideal_pos)),
+                    'sentiment_alignment_score': D_sen,
+                    'sample_size': len(df)
+                }
+                
+                # Cache the results
+                self.cache.save_cache("sentiment_diversity", self.original_fingerprint, result, text_column)
+                return result
+                
+            except Exception as e:
+                logger.error(f"Error calculating sentiment distribution: {str(e)}")
+                result = {
+                    'sentiment_by_rating': {},
+                    'ideal_sentiment': {},
+                    'sentiment_alignment_score': 0.0,
+                    'sample_size': len(df),
+                    'error': str(e)
+                }
+                
+                # Cache the results
+                self.cache.save_cache("sentiment_diversity", self.original_fingerprint, result, text_column)
+                return result
+                
+        except Exception as e:
+            logger.error(f"Error in sentiment diversity evaluation: {str(e)}")
+            return {
+                'sentiment_by_rating': {},
+                'ideal_sentiment': {},
+                'sentiment_alignment_score': 0.0,
+                'sample_size': 0,
+                'error': str(e)
+            }
     
     def evaluate(self) -> Dict:
         """

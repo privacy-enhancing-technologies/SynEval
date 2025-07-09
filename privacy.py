@@ -29,10 +29,15 @@ from functools import lru_cache
 import threading
 import warnings
 import json
+import hashlib
 from pathlib import Path
+import pickle
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
+
+# Device management for Flair models
+import torch
 
 # Download required NLTK data
 nltk.download('punkt', quiet=True)
@@ -42,20 +47,129 @@ nltk.download('stopwords', quiet=True)
 _model_cache = {}
 _model_lock = threading.Lock()
 
+def compute_dataset_fingerprint(data: pd.DataFrame, metadata: Dict) -> str:
+    """
+    Compute a unique fingerprint for the dataset to identify changes.
+    
+    Args:
+        data: DataFrame to fingerprint
+        metadata: Metadata dictionary
+    
+    Returns:
+        str: SHA256 hash of dataset characteristics
+    """
+    # Create a fingerprint based on data characteristics
+    fingerprint_data = {
+        'shape': data.shape,
+        'columns': list(data.columns),
+        'dtypes': {col: str(dtype) for col, dtype in data.dtypes.items()},
+        'metadata_columns': list(metadata.get('columns', {}).keys()),
+        'sample_hash': hashlib.sha256(
+            data.head(1000).to_string().encode()
+        ).hexdigest()[:16],  # First 1000 rows hash
+        'total_hash': hashlib.sha256(
+            data.to_string().encode()
+        ).hexdigest()[:16]   # Full dataset hash
+    }
+    
+    # Convert to string and hash
+    fingerprint_str = json.dumps(fingerprint_data, sort_keys=True)
+    return hashlib.sha256(fingerprint_str.encode()).hexdigest()
+
+class SmartCache:
+    """Smart cache system with dataset fingerprinting."""
+    
+    def __init__(self, cache_dir: str = "./cache"):
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+        self.fingerprint_file = self.cache_dir / "dataset_fingerprints.json"
+        self.fingerprints = self._load_fingerprints()
+    
+    def _load_fingerprints(self) -> Dict:
+        """Load dataset fingerprints."""
+        if self.fingerprint_file.exists():
+            try:
+                with open(self.fingerprint_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logging.warning(f"Error loading fingerprints: {str(e)}")
+        return {}
+    
+    def _save_fingerprints(self):
+        """Save dataset fingerprints."""
+        try:
+            with open(self.fingerprint_file, 'w') as f:
+                json.dump(self.fingerprints, f, indent=2)
+        except Exception as e:
+            logging.warning(f"Error saving fingerprints: {str(e)}")
+    
+    def get_cache_path(self, cache_type: str, column: str = None) -> Path:
+        """Get cache file path."""
+        if column:
+            return self.cache_dir / f"{cache_type}_{column}.pkl"
+        return self.cache_dir / f"{cache_type}.pkl"
+    
+    def is_valid_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> bool:
+        """Check if cache is valid for current dataset."""
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        return self.fingerprints.get(cache_key) == dataset_fingerprint
+    
+    def load_cache(self, cache_type: str, dataset_fingerprint: str, column: str = None) -> Optional[Dict]:
+        """Load cache if valid."""
+        if not self.is_valid_cache(cache_type, dataset_fingerprint, column):
+            return None
+        
+        cache_path = self.get_cache_path(cache_type, column)
+        if cache_path.exists():
+            try:
+                with open(cache_path, 'rb') as f:
+                    return pickle.load(f)
+            except Exception as e:
+                logging.warning(f"Error loading cache {cache_type}: {str(e)}")
+        return None
+    
+    def save_cache(self, cache_type: str, dataset_fingerprint: str, data: Dict, column: str = None):
+        """Save cache with fingerprint."""
+        cache_path = self.get_cache_path(cache_type, column)
+        cache_key = f"{cache_type}_{column}" if column else cache_type
+        
+        try:
+            with open(cache_path, 'wb') as f:
+                pickle.dump(data, f)
+            
+            # Update fingerprint
+            self.fingerprints[cache_key] = dataset_fingerprint
+            self._save_fingerprints()
+            
+            logging.info(f"Saved cache for {cache_type}")
+        except Exception as e:
+            logging.warning(f"Error saving cache {cache_type}: {str(e)}")
+
 def get_flair_model(model_name: str = 'flair/ner-english-large') -> SequenceTagger:
     """
-    Get or load Flair model with caching.
+    Get or load Flair model with caching and device management.
     """
     with _model_lock:
         if model_name not in _model_cache:
-            # Set number of threads for CPU
-            torch.set_num_threads(4)  # Adjust based on your CPU
+            # Load the model
             _model_cache[model_name] = SequenceTagger.load(model_name)
+            
             # Disable gradient computation for inference
             _model_cache[model_name].eval()
-            # Use CPU
-            _model_cache[model_name] = _model_cache[model_name].to('cpu')
+            
+            # Move model to the best available device (compatible with all Flair versions)
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            _model_cache[model_name] = _model_cache[model_name].to(device)
+                
         return _model_cache[model_name]
+
+def ensure_tensor_device(tensor, device):
+    """
+    Ensure a tensor is on the specified device.
+    """
+    if tensor is not None and tensor.device != device:
+        return tensor.to(device)
+    return tensor
 
 class PrivacyEvaluator:
     def __init__(self, synthetic_data: pd.DataFrame, original_data: pd.DataFrame, metadata: Dict):
@@ -72,13 +186,20 @@ class PrivacyEvaluator:
         self.metadata = metadata
         self.logger = logging.getLogger(__name__)
         
-        # Initialize cache directory and file
-        self.cache_dir = Path('./cache')
-        self.cache_file = self.cache_dir / 'privacy_entities_detected.json'
-        self.cache_dir.mkdir(exist_ok=True)
+        # Initialize smart cache
+        self.cache = SmartCache('./cache')
         
-        # Load cache if exists
-        self.cache = self._load_cache()
+        # Compute dataset fingerprints
+        self.original_fingerprint = compute_dataset_fingerprint(original_data, metadata)
+        self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
+        
+        # Detect best available device
+        if torch.cuda.is_available():
+            self.device = torch.device('cuda')
+            self.logger.info("Using CUDA for acceleration")
+        else:
+            self.device = torch.device('cpu')
+            self.logger.info("Using CPU")
         
         # Initialize Flair NER model with caching
         try:
@@ -120,38 +241,7 @@ class PrivacyEvaluator:
             }
         }
 
-    def _load_cache(self) -> Dict:
-        """Load the detection cache from file."""
-        if self.cache_file.exists():
-            try:
-                with open(self.cache_file, 'r') as f:
-                    return json.load(f)
-            except json.JSONDecodeError:
-                self.logger.warning("Cache file is corrupted. Creating new cache.")
-                return self._create_empty_cache()
-        return self._create_empty_cache()
 
-    def _create_empty_cache(self) -> Dict:
-        """Create an empty cache structure."""
-        return {
-            "named_entities": {
-                "original": {"entities_by_type": {}},
-                "synthetic": {"entities_by_type": {}}
-            },
-            "nominal_mentions": {
-                "original": {"nominals": []},
-                "synthetic": {"nominals": []}
-            },
-            "stylistic_outliers": {
-                "original": {"outlier_texts": []},
-                "synthetic": {"outlier_texts": []}
-            }
-        }
-
-    def _save_cache(self):
-        """Save the current cache to file."""
-        with open(self.cache_file, 'w') as f:
-            json.dump(self.cache, f, indent=2)
 
     def evaluate(self) -> Dict:
         """
@@ -211,9 +301,9 @@ class PrivacyEvaluator:
         """
         self.logger.info("Starting membership inference attack evaluation...")
         
-        # Get text columns from metadata
+        # Get text columns from metadata that actually exist in the data
         text_columns = [col for col, info in self.metadata['columns'].items() 
-                       if info['sdtype'] == 'text']
+                       if info['sdtype'] == 'text' and col in self.synthetic_data.columns]
         
         # Combine text data from both datasets
         if text_columns:
@@ -370,9 +460,9 @@ class PrivacyEvaluator:
         Returns:
             Tuple of (features array, fitted vectorizer)
         """
-        # Get text columns from metadata
+        # Get text columns from metadata that actually exist in the data
         text_columns = [col for col, info in self.metadata['columns'].items() 
-                       if info['sdtype'] == 'text']
+                       if info['sdtype'] == 'text' and col in data.columns]
         
         # Get non-text columns
         non_text_cols = [col for col in data.columns if col not in text_columns]
@@ -784,10 +874,13 @@ class PrivacyEvaluator:
 
     def _process_entities_batch(self, texts: List[str]) -> List[Tuple]:
         """
-        Process a batch of texts to extract named entities using Flair with optimized batch processing.
+        Process a batch of texts to extract named entities using Flair.
         """
         results = []
-        batch_size = 16  # Smaller batch size for CPU
+        batch_size = 64 if self.device.type == 'cuda' else 16  # Larger batch for GPU
+        
+        # Ensure model is on the correct device (compatible with all Flair versions)
+        self.ner_tagger = self.ner_tagger.to(self.device)
         
         # Process texts in batches with progress bar
         with tqdm(total=len(texts), desc="Processing entities", unit="text") as pbar:
@@ -795,7 +888,7 @@ class PrivacyEvaluator:
                 batch_texts = texts[i:i + batch_size]
                 sentences = [Sentence(text) for text in batch_texts]
                 
-                # Run NER on the batch
+                # Run NER on the batch (compatible with all Flair versions)
                 self.ner_tagger.predict(sentences)
                 
                 # Process results
@@ -944,7 +1037,8 @@ class PrivacyEvaluator:
             return grouped
             
         # Check cache for original data
-        if not self.cache.get('named_entities', {}).get('original', {}).get('entities_by_type'):
+        cached_orig_data = self.cache.load_cache('named_entities_original', self.original_fingerprint, text_column)
+        if cached_orig_data is None:
             self.logger.info("Processing original data entities (not in cache)...")
             orig_texts = self.original_data[text_column].astype(str).tolist()
             orig_results = self._process_entities_batch(orig_texts)
@@ -954,19 +1048,14 @@ class PrivacyEvaluator:
             for entities, _, _ in orig_results:
                 orig_entities.update(entities)
             
-            # Ensure the cache structure exists
-            if 'named_entities' not in self.cache:
-                self.cache['named_entities'] = {}
-            if 'original' not in self.cache['named_entities']:
-                self.cache['named_entities']['original'] = {}
-            
-            self.cache['named_entities']['original']['entities_by_type'] = group_entities(orig_entities)
-            self._save_cache()
+            # Save to cache
+            self.cache.save_cache('named_entities_original', self.original_fingerprint, 
+                                {'entities_by_type': group_entities(orig_entities)}, text_column)
         else:
             self.logger.info("Using cached original data entities...")
             # Reconstruct entities set from entities_by_type
             orig_entities = set()
-            for entity_type, entities in self.cache['named_entities']['original']['entities_by_type'].items():
+            for entity_type, entities in cached_orig_data['entities_by_type'].items():
                 orig_entities.update((entity, entity_type) for entity in entities)
         
         # Process synthetic data (always process as it changes)
@@ -979,14 +1068,9 @@ class PrivacyEvaluator:
         for entities, _, _ in syn_results:
             syn_entities.update(entities)
         
-        # Ensure the cache structure exists for synthetic data
-        if 'named_entities' not in self.cache:
-            self.cache['named_entities'] = {}
-        if 'synthetic' not in self.cache['named_entities']:
-            self.cache['named_entities']['synthetic'] = {}
-        
-        self.cache['named_entities']['synthetic']['entities_by_type'] = group_entities(syn_entities)
-        self._save_cache()
+        # Save synthetic data entities to cache
+        self.cache.save_cache('named_entities_synthetic', self.synthetic_fingerprint, 
+                            {'entities_by_type': group_entities(syn_entities)}, text_column)
         
         # Calculate statistics
         syn_total_entities = len(syn_entities)
@@ -1027,24 +1111,9 @@ class PrivacyEvaluator:
         if not text_column:
             return {'error': 'No text column found'}
             
-        # Ensure cache is properly initialized
-        if not hasattr(self, 'cache') or not isinstance(self.cache, dict):
-            self.cache = self._create_empty_cache()
-            
-        # Ensure nominal_mentions structure exists and is a dictionary
-        if 'nominal_mentions' not in self.cache or not isinstance(self.cache['nominal_mentions'], dict):
-            self.cache['nominal_mentions'] = {}
-            
-        # Ensure original structure exists and is a dictionary
-        if 'original' not in self.cache['nominal_mentions'] or not isinstance(self.cache['nominal_mentions']['original'], dict):
-            self.cache['nominal_mentions']['original'] = {}
-            
-        # Ensure nominals exists and is a list
-        if 'nominals' not in self.cache['nominal_mentions']['original'] or not isinstance(self.cache['nominal_mentions']['original']['nominals'], list):
-            self.cache['nominal_mentions']['original']['nominals'] = []
-            
-        # Check if we need to process original data
-        if not self.cache['nominal_mentions']['original']['nominals']:
+        # Check cache for original data nominal mentions
+        cached_orig_nominals = self.cache.load_cache('nominal_mentions_original', self.original_fingerprint, text_column)
+        if cached_orig_nominals is None:
             self.logger.info("Processing original data nominal mentions (not in cache)...")
             orig_texts = self.original_data[text_column].astype(str).tolist()
             orig_results = self._process_nominals_batch(orig_texts)
@@ -1054,11 +1123,11 @@ class PrivacyEvaluator:
             for nominals, _, _ in orig_results:
                 orig_nominals.update(nominals)
             
-            self.cache['nominal_mentions']['original']['nominals'] = list(orig_nominals)
-            self._save_cache()
+            self.cache.save_cache('nominal_mentions_original', self.original_fingerprint, 
+                                {'nominals': list(orig_nominals)}, text_column)
         else:
             self.logger.info("Using cached original data nominal mentions...")
-            orig_nominals = set(self.cache['nominal_mentions']['original']['nominals'])
+            orig_nominals = set(cached_orig_nominals['nominals'])
         
         # Process synthetic data (always process as it changes)
         self.logger.info("Processing synthetic data nominal mentions...")
@@ -1070,16 +1139,9 @@ class PrivacyEvaluator:
         for nominals, _, _ in syn_results:
             syn_nominals.update(nominals)
         
-        # Ensure synthetic structure exists and is a dictionary
-        if 'synthetic' not in self.cache['nominal_mentions'] or not isinstance(self.cache['nominal_mentions']['synthetic'], dict):
-            self.cache['nominal_mentions']['synthetic'] = {}
-            
-        # Ensure synthetic nominals exists and is a list
-        if 'nominals' not in self.cache['nominal_mentions']['synthetic'] or not isinstance(self.cache['nominal_mentions']['synthetic']['nominals'], list):
-            self.cache['nominal_mentions']['synthetic']['nominals'] = []
-        
-        self.cache['nominal_mentions']['synthetic']['nominals'] = list(syn_nominals)
-        self._save_cache()
+        # Save synthetic data nominal mentions to cache
+        self.cache.save_cache('nominal_mentions_synthetic', self.synthetic_fingerprint, 
+                            {'nominals': list(syn_nominals)}, text_column)
         
         # Calculate statistics
         syn_total_nominals = len(syn_nominals)
@@ -1120,8 +1182,9 @@ class PrivacyEvaluator:
         if not text_column:
             return {'error': 'No text column found'}
         
-        # Check cache for original data
-        if not self.cache['stylistic_outliers']['original']['outlier_texts']:
+        # Check cache for original data stylistic outliers
+        cached_orig_outliers = self.cache.load_cache('stylistic_outliers_original', self.original_fingerprint, text_column)
+        if cached_orig_outliers is None:
             self.logger.info("Processing original data stylistic outliers (not in cache)...")
             orig_texts = self.original_data[text_column].astype(str).tolist()
             orig_embeddings = self._generate_text_embeddings(orig_texts)
@@ -1142,11 +1205,11 @@ class PrivacyEvaluator:
                     outlier_texts.append(text)
                     seen_texts.add(text)
             
-            self.cache['stylistic_outliers']['original']['outlier_texts'] = outlier_texts
-            self._save_cache()
+            self.cache.save_cache('stylistic_outliers_original', self.original_fingerprint, 
+                                {'outlier_texts': outlier_texts}, text_column)
         else:
             self.logger.info("Using cached original data stylistic outliers...")
-            outlier_texts = self.cache['stylistic_outliers']['original']['outlier_texts']
+            outlier_texts = cached_orig_outliers['outlier_texts']
             orig_outliers = np.array([text in outlier_texts for text in self.original_data[text_column].astype(str).tolist()])
         
         # Process synthetic data (always process as it changes)
@@ -1170,8 +1233,11 @@ class PrivacyEvaluator:
                 outlier_texts.append(text)
                 seen_texts.add(text)
         
-        self.cache['stylistic_outliers']['synthetic']['outlier_texts'] = outlier_texts
-        self._save_cache()
+        self.cache.save_cache('stylistic_outliers_synthetic', self.synthetic_fingerprint, 
+                            {'outlier_texts': outlier_texts}, text_column)
+        
+        # Get original outlier count for comparison
+        orig_outlier_count = len(cached_orig_outliers['outlier_texts']) if cached_orig_outliers else 0
         
         return {
             'synthetic': {
@@ -1180,13 +1246,13 @@ class PrivacyEvaluator:
                 'risk_level': 'high' if len(outlier_texts) / len(syn_texts) > 0.1 else 'low'
             },
             'original': {
-                'num_outliers': len(self.cache['stylistic_outliers']['original']['outlier_texts']),
-                'outlier_percentage': float(len(self.cache['stylistic_outliers']['original']['outlier_texts']) / len(self.original_data) * 100),
-                'risk_level': 'high' if len(self.cache['stylistic_outliers']['original']['outlier_texts']) / len(self.original_data) > 0.1 else 'low'
+                'num_outliers': orig_outlier_count,
+                'outlier_percentage': float(orig_outlier_count / len(self.original_data) * 100),
+                'risk_level': 'high' if orig_outlier_count / len(self.original_data) > 0.1 else 'low'
             },
             'comparison': {
-                'outlier_ratio': float(len(outlier_texts) / len(self.cache['stylistic_outliers']['original']['outlier_texts'])) if self.cache['stylistic_outliers']['original']['outlier_texts'] else float('inf'),
-                'risk_level': 'high' if abs(len(outlier_texts) / len(syn_texts) - len(self.cache['stylistic_outliers']['original']['outlier_texts']) / len(self.original_data)) > 0.1 else 'low'
+                'outlier_ratio': float(len(outlier_texts) / orig_outlier_count) if orig_outlier_count > 0 else float('inf'),
+                'risk_level': 'high' if abs(len(outlier_texts) / len(syn_texts) - orig_outlier_count / len(self.original_data)) > 0.1 else 'low'
             }
         }
 
@@ -1195,7 +1261,13 @@ class PrivacyEvaluator:
         Identify the text column in the dataset.
         """
         if 'text_columns' in self.metadata:
-            return self.metadata['text_columns'][0]
+            text_col = self.metadata['text_columns'][0]
+            # Check if the text column actually exists in the data
+            if text_col in self.synthetic_data.columns:
+                return text_col
+            else:
+                self.logger.warning(f"Text column '{text_col}' from metadata not found in data")
+                return None
         return None
 
     def _is_text_data(self) -> bool:

@@ -396,13 +396,26 @@ class SynEvalPlotter:
                             # Lexical diversity
                             if 'lexical_diversity' in col_results:
                                 lexical = col_results['lexical_diversity']
-                                ngrams = list(lexical.keys())
-                                unique_ratios = [lexical[ng]['unique_ratio'] for ng in ngrams]
+                                ngrams = []
+                                unique_ratios = []
                                 
-                                ax1.bar(ngrams, unique_ratios, color='#2E86AB')
-                                ax1.set_title('Lexical Diversity (Unique Ratio)')
-                                ax1.set_ylabel('Unique Ratio')
-                                ax1.grid(True, alpha=0.3)
+                                for ng in lexical.keys():
+                                    if isinstance(lexical[ng], dict) and 'unique_ratio' in lexical[ng]:
+                                        ngrams.append(ng)
+                                        unique_ratios.append(lexical[ng]['unique_ratio'])
+                                    else:
+                                        logger.warning(f"lexical[{ng}] is not a dict or missing 'unique_ratio' for column '{col_name}' in dataset '{dataset_type}': {lexical[ng]} (type: {type(lexical[ng])})")
+                                
+                                if ngrams:
+                                    ax1.bar(ngrams, unique_ratios, color='#2E86AB')
+                                    ax1.set_title('Lexical Diversity (Unique Ratio)')
+                                    ax1.set_ylabel('Unique Ratio')
+                                    ax1.grid(True, alpha=0.3)
+                                else:
+                                    ax1.text(0.5, 0.5, 'No valid lexical diversity data', ha='center', va='center', transform=ax1.transAxes)
+                                    ax1.set_title('Lexical Diversity (Unique Ratio)')
+                                    ax1.set_ylabel('Unique Ratio')
+                                    ax1.grid(True, alpha=0.3)
                             
                             # Semantic diversity
                             if 'semantic_diversity' in col_results:
@@ -422,11 +435,26 @@ class SynEvalPlotter:
                             # Sentiment diversity
                             if 'sentiment_diversity' in col_results:
                                 sentiment = col_results['sentiment_diversity']
-                                if 'sentiment_by_rating' in sentiment:
-                                    ratings = list(sentiment['sentiment_by_rating'].keys())
-                                    values = list(sentiment['sentiment_by_rating'].values())
-                                    
-                                    ax3.bar(ratings, values, color='#F18F01')
+                                sbr = sentiment.get('sentiment_by_rating', None)
+                                if sbr is not None and sbr != {}:
+                                    if not isinstance(sbr, dict):
+                                        logger.error(f"sentiment_by_rating is not a dict for column '{col_name}' in dataset '{dataset_type}': {sbr} (type: {type(sbr)})")
+                                        ax3.text(0.5, 0.5, f"Error: sentiment_by_rating is not a dict", ha='center', va='center', transform=ax3.transAxes, color='red')
+                                        ax3.set_title('Sentiment by Rating')
+                                        ax3.set_ylabel('Positive Sentiment %')
+                                        ax3.set_xlabel('Rating')
+                                        ax3.grid(True, alpha=0.3)
+                                    else:
+                                        ratings = list(sbr.keys())
+                                        values = list(sbr.values())
+                                        ax3.bar(ratings, values, color='#F18F01')
+                                        ax3.set_title('Sentiment by Rating')
+                                        ax3.set_ylabel('Positive Sentiment %')
+                                        ax3.set_xlabel('Rating')
+                                        ax3.grid(True, alpha=0.3)
+                                else:
+                                    # No sentiment_by_rating data
+                                    ax3.text(0.5, 0.5, 'No sentiment by rating data', ha='center', va='center', transform=ax3.transAxes)
                                     ax3.set_title('Sentiment by Rating')
                                     ax3.set_ylabel('Positive Sentiment %')
                                     ax3.set_xlabel('Rating')
@@ -436,6 +464,14 @@ class SynEvalPlotter:
                                     alignment = sentiment['sentiment_alignment_score']
                                     ax4.bar(['Sentiment Alignment'], [alignment], 
                                            color='green' if alignment > 0.7 else 'orange' if alignment > 0.5 else 'red')
+                                    ax4.set_title('Sentiment Alignment Score')
+                                    ax4.set_ylabel('Score')
+                                    ax4.set_ylim(0, 1)
+                                    ax4.grid(True, alpha=0.3)
+                                else:
+                                    # No sentiment alignment score
+                                    ax4.text(0.5, 0.5, 'No sentiment alignment data', 
+                                           ha='center', va='center', transform=ax4.transAxes)
                                     ax4.set_title('Sentiment Alignment Score')
                                     ax4.set_ylabel('Score')
                                     ax4.set_ylim(0, 1)
@@ -450,6 +486,8 @@ class SynEvalPlotter:
         
         except Exception as e:
             logger.error(f"Error plotting diversity results: {str(e)}")
+            import traceback
+            traceback.print_exc()
         
         return plot_files
     

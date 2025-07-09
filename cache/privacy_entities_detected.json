@@ -1699,24 +1699,24 @@
     },
     "synthetic": {
       "nominals": [
-        "Motivating",
-        "Meh",
-        "Glitchy",
-        "Interface",
-        "Ads",
-        "Collaborative",
-        "Fun",
-        "Waste",
-        "Inconsistent",
-        "community",
-        "Essential",
         "Keeps",
-        "Scam",
         "app",
-        "Drains",
+        "Collaborative",
+        "Interface",
+        "Motivating",
+        "Waste",
         "insights",
+        "Drains",
+        "Fun",
+        "Meh",
+        "Scam",
+        "Ads",
+        "community",
+        "Inconsistent",
         "ADHD",
-        "Awful"
+        "Essential",
+        "Awful",
+        "Glitchy"
       ]
     }
   },

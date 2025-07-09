@@ -475,7 +475,7 @@ def main():
     
     try:
         # Configuration
-        csv_file = 'Amazon_Fashion.csv'
+        csv_file = 'real_10k.csv'
         text_column = 'text'
         sample_size = 10000  # Start with 10K for testing
         
