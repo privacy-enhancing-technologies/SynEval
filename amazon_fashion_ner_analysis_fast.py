@@ -20,9 +20,89 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # Suppress warnings
 warnings.filterwarnings('ignore')
 
+# Intelligent device detection with better GPU support
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"  # Suppress TensorFlow warnings
+
+def get_device():
+    """Intelligently detect and return the best available device."""
+    if torch.cuda.is_available():
+        device = torch.device('cuda:0')
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"Using GPU: {gpu_name}")
+        return device
+    else:
+        device = torch.device('cpu')
+        print("Using CPU (GPU not available)")
+        return device
+
+def force_model_to_device_recursive(model, device):
+    """Recursively force all model components to the specified device."""
+    try:
+        # Move model to device
+        model.to(device)
+        
+        # Force all parameters to device
+        for param in model.parameters():
+            param.data = param.data.to(device)
+        
+        # Force all buffers to device
+        for buffer in model.buffers():
+            buffer.data = buffer.data.to(device)
+        
+        # Recursively process all modules
+        for module in model.modules():
+            try:
+                module.to(device)
+                for param in module.parameters():
+                    param.data = param.data.to(device)
+                for buffer in module.buffers():
+                    buffer.data = buffer.data.to(device)
+            except:
+                pass
+        
+        # Special handling for embeddings
+        if hasattr(model, 'embeddings'):
+            for embedding in model.embeddings.embeddings:
+                try:
+                    embedding.to(device)
+                    # Update device attribute if it exists
+                    if hasattr(embedding, 'device'):
+                        embedding.device = device
+                    if hasattr(embedding, 'lm'):
+                        embedding.lm.to(device)
+                        # Update LM device attribute
+                        if hasattr(embedding.lm, 'device'):
+                            embedding.lm.device = device
+                        force_model_to_device_recursive(embedding.lm, device)
+                except:
+                    pass
+        
+        # Special handling for decoder
+        if hasattr(model, 'decoder'):
+            try:
+                model.decoder.to(device)
+                if hasattr(model.decoder, 'device'):
+                    model.decoder.device = device
+                force_model_to_device_recursive(model.decoder, device)
+            except:
+                pass
+                
+    except Exception as e:
+        print(f"Warning: Could not force some components to {device}: {e}")
+    
+    return model
+
 # Global model cache
 _model_cache = {}
 _model_lock = threading.Lock()
+
+def clear_model_cache():
+    """Clear the global model cache to force fresh loading."""
+    global _model_cache
+    with _model_lock:
+        _model_cache.clear()
+        print("Model cache cleared.")
 
 def get_flair_model(model_name: str = 'flair/ner-english-fast') -> SequenceTagger:
     """
@@ -30,13 +110,27 @@ def get_flair_model(model_name: str = 'flair/ner-english-fast') -> SequenceTagge
     """
     with _model_lock:
         if model_name not in _model_cache:
-            # Set number of threads for CPU
-            torch.set_num_threads(mp.cpu_count())  # Use all CPU cores
+            print("Loading Flair NER model...")
+            
+            # Get the best available device
+            device = get_device()
+            
+            # Set number of threads for CPU if using CPU
+            if device.type == 'cpu':
+                torch.set_num_threads(mp.cpu_count())  # Use all CPU cores
+            
+            # Load model
+            print(f"Loading model to {device}...")
             _model_cache[model_name] = SequenceTagger.load(model_name)
+            
+            # Force model to the detected device
+            print(f"Moving model to {device}...")
+            _model_cache[model_name] = force_model_to_device_recursive(_model_cache[model_name], device)
+            
             # Disable gradient computation for inference
             _model_cache[model_name].eval()
-            # Use CPU
-            _model_cache[model_name] = _model_cache[model_name].to('cpu')
+            print(f"Model loaded successfully on {device}")
+            
         return _model_cache[model_name]
 
 class FastAmazonFashionNERAnalyzer:
@@ -92,7 +186,7 @@ class FastAmazonFashionNERAnalyzer:
         # Create sentences
         sentences = [Sentence(text) for text in texts_batch]
         
-        # Run NER on the batch
+        # Run NER on the batch (model is already on correct device)
         self.ner_tagger.predict(sentences)
         
         # Process results
@@ -123,18 +217,50 @@ class FastAmazonFashionNERAnalyzer:
 
     def _process_entities_batch_optimized(self, texts: List[str]) -> List[Tuple]:
         """
-        Process texts in larger batches with better optimization.
+        Process texts in larger batches with better optimization and progress tracking.
         """
         results = []
-        batch_size = 64  # Larger batch size for better performance
         
-        # Process texts in batches with progress bar
-        with tqdm(total=len(texts), desc="Processing entities", unit="text") as pbar:
+        # Determine optimal batch size based on device
+        device = get_device()
+        if device.type == 'cuda':
+            batch_size = 128  # Larger batches for GPU
+            print(f"Using GPU batch size: {batch_size}")
+        else:
+            batch_size = 64   # Smaller batches for CPU
+            print(f"Using CPU batch size: {batch_size}")
+        
+        # Process texts in batches with detailed progress bar
+        total_batches = (len(texts) + batch_size - 1) // batch_size
+        print(f"Processing {len(texts)} texts in {total_batches} batches...")
+        
+        with tqdm(total=len(texts), desc="Processing entities", unit="text", 
+                 bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]') as pbar:
+            
             for i in range(0, len(texts), batch_size):
                 batch_texts = texts[i:i + batch_size]
-                batch_results = self._process_text_batch(batch_texts)
-                results.extend(batch_results)
-                pbar.update(len(batch_texts))
+                batch_num = i // batch_size + 1
+                
+                # Update progress description
+                pbar.set_description(f"Processing batch {batch_num}/{total_batches}")
+                
+                try:
+                    batch_results = self._process_text_batch(batch_texts)
+                    results.extend(batch_results)
+                    pbar.update(len(batch_texts))
+                    
+                    # Show batch statistics
+                    batch_entities = sum(len(result[0]) for result in batch_results)
+                    pbar.set_postfix({
+                        'batch': f"{batch_num}/{total_batches}",
+                        'entities': batch_entities,
+                        'avg_entities': f"{batch_entities/len(batch_texts):.1f}"
+                    })
+                    
+                except Exception as e:
+                    print(f"Error processing batch {batch_num}: {e}")
+                    # Continue with next batch
+                    pbar.update(len(batch_texts))
         
         return results
 
@@ -142,9 +268,14 @@ class FastAmazonFashionNERAnalyzer:
         """
         Analyze named entities in the Amazon Fashion dataset - optimized version.
         """
+        print("="*60)
+        print("AMAZON FASHION NER ANALYSIS - FAST VERSION")
+        print("="*60)
+        
         self.logger.info(f"Loading dataset from {csv_file}...")
         
-        # Load dataset
+        # Load dataset with progress
+        print("Loading dataset...")
         if sample_size:
             df = pd.read_csv(csv_file, nrows=sample_size)
             self.logger.info(f"Loaded {len(df)} samples from dataset")
@@ -158,29 +289,36 @@ class FastAmazonFashionNERAnalyzer:
             raise ValueError(f"Text column '{text_column}' not found. Available columns: {available_columns}")
         
         # Clean and prepare texts
+        print("Preparing texts...")
         texts = df[text_column].astype(str).fillna('').tolist()
         
         # Remove empty texts and very short texts
+        original_count = len(texts)
         texts = [text for text in texts if len(text.strip()) > 10]  # Only texts with >10 chars
-        self.logger.info(f"Processing {len(texts)} non-empty texts")
+        self.logger.info(f"Processing {len(texts)} non-empty texts (filtered from {original_count})")
         
         # Check cache first
         cache_key = f"amazon_fashion_entities_fast_{len(texts)}"
         if cache_key in self.cache:
             self.logger.info("Using cached results...")
+            print("Found cached results! Loading...")
             return self.cache[cache_key]
         
         # Process entities
+        print("Starting entity processing...")
         self.logger.info("Processing entities...")
         results = self._process_entities_batch_optimized(texts)
         
         # Create detailed analysis
+        print("Creating analysis...")
         analysis_results = self._create_detailed_analysis(results, texts, df)
         
         # Save to cache
+        print("Saving results to cache...")
         self.cache[cache_key] = analysis_results
         self._save_cache()
         
+        print("Analysis completed successfully!")
         return analysis_results
 
     def _create_detailed_analysis(self, results: List[Tuple], texts: List[str], df: pd.DataFrame) -> Dict:
@@ -286,26 +424,37 @@ class FastAmazonFashionNERAnalyzer:
 
     def generate_report(self, results: Dict, output_dir: str = './reports'):
         """
-        Generate comprehensive report files.
+        Generate comprehensive report files with progress tracking.
         """
+        print("="*60)
+        print("GENERATING REPORTS")
+        print("="*60)
+        
         # Create output directory
         Path(output_dir).mkdir(exist_ok=True)
         
         # Generate timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
+        print("Generating reports...")
+        
         # 1. Main Analysis Report
+        print("1/4 - Generating main analysis report...")
         self._generate_main_report(results, output_dir, timestamp)
         
         # 2. Top 200 High Entity Texts Report
+        print("2/4 - Generating top 200 high entity texts report...")
         self._generate_top_200_report(results, output_dir, timestamp)
         
         # 3. Entity Density Analysis Report
+        print("3/4 - Generating entity density analysis report...")
         self._generate_density_report(results, output_dir, timestamp)
         
         # 4. Visualizations
+        print("4/4 - Generating visualizations...")
         self._generate_visualizations(results, output_dir, timestamp)
         
+        print(f"All reports generated successfully in {output_dir}")
         self.logger.info(f"Reports generated in {output_dir}")
 
     def _generate_main_report(self, results: Dict, output_dir: str, timestamp: str):

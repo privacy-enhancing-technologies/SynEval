@@ -385,6 +385,31 @@ class UtilityEvaluator:
             y_train_syn = y_train_syn.fillna(y_train_syn.mean() if self.task_type == 'regression' else y_train_syn.mode().iloc[0])
             y_test = y_test.fillna(y_test.mean() if self.task_type == 'regression' else y_test.mode().iloc[0])
             
+            # For classification tasks, ensure all datasets have the same class labels
+            if self.task_type in ['classification', 'text_classification']:
+                # Get all unique values from all datasets
+                all_values = set()
+                all_values.update(y_train_real.unique())
+                all_values.update(y_train_syn.unique())
+                all_values.update(y_test.unique())
+                
+                # Convert to sorted list for consistent ordering
+                all_values = sorted(list(all_values))
+                logger.info(f"All unique target values: {all_values}")
+                
+                # Create label encoder to map values to 0, 1, 2, ...
+                from sklearn.preprocessing import LabelEncoder
+                label_encoder = LabelEncoder()
+                label_encoder.fit(all_values)
+                
+                # Transform all target variables
+                y_train_real = label_encoder.transform(y_train_real)
+                y_train_syn = label_encoder.transform(y_train_syn)
+                y_test = label_encoder.transform(y_test)
+                
+                logger.info(f"Encoded classes: {label_encoder.classes_}")
+                logger.info(f"Expected class range: 0 to {len(all_values)-1}")
+            
             # Train two separate models
             model_real = self._get_model()
             model_syn = self._get_model()

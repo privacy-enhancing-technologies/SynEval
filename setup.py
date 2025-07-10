@@ -1,73 +1,161 @@
 #!/usr/bin/env python3
+
 """
-Setup script for SynEval package.
+SynEval Environment Setup Script
+Complete environment preparation for SynEval framework
 """
 
-from setuptools import setup, find_packages
 import os
+import sys
+import subprocess
+import ssl
 
-# Read the README file
-def read_readme():
-    with open("README.md", "r", encoding="utf-8") as fh:
-        return fh.read()
+def install_requirements():
+    """Install required Python packages from requirements.txt."""
+    print("📦 Installing Python dependencies...")
+    
+    try:
+        # Install requirements with upgrade to resolve conflicts
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", 
+            "--upgrade", "-r", "requirements.txt"
+        ])
+        print("✅ Dependencies installed successfully!")
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to install dependencies: {e}")
+        print("💡 Try running: pip install --upgrade pip")
+        return False
 
-# Read requirements
-def read_requirements():
-    with open("requirements.txt", "r", encoding="utf-8") as fh:
-        return [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+def download_nltk_data():
+    """Download required NLTK data with proxy handling."""
+    
+    print("🔧 Setting up NLTK data...")
+    
+    # Import nltk after installing dependencies
+    try:
+        import nltk
+    except ImportError:
+        print("❌ NLTK not found. Please install dependencies first.")
+        return False
+    
+    # Create NLTK data directory
+    nltk_data_dir = os.path.expanduser("~/nltk_data")
+    os.makedirs(nltk_data_dir, exist_ok=True)
+    
+    # Set NLTK data path
+    nltk.data.path.append(nltk_data_dir)
+    
+    # Handle SSL certificate issues
+    try:
+        _create_unverified_https_context = ssl._create_unverified_context
+    except AttributeError:
+        pass
+    else:
+        ssl._create_default_https_context = _create_unverified_https_context
+    
+    # Required NLTK data packages (including punkt_tab)
+    required_packages = [
+        'punkt',
+        'punkt_tab',  # Added this missing package
+        'averaged_perceptron_tagger',
+        'maxent_ne_chunker',
+        'words',
+        'stopwords'
+    ]
+    
+    print("📦 Downloading NLTK data packages...")
+    
+    for package in required_packages:
+        try:
+            print(f"  Downloading {package}...")
+            nltk.download(package, quiet=True)
+            print(f"  ✅ {package} downloaded successfully")
+        except Exception as e:
+            print(f"  ⚠️ Failed to download {package}: {e}")
+            print(f"  💡 You can manually download it later or continue without it")
+    
+    print("\n🎉 NLTK data setup completed!")
+    print(f"📁 Data location: {nltk_data_dir}")
+    return True
 
-setup(
-    name="syneval",
-    version="0.1.0",
-    author="Your Name",
-    author_email="your.email@example.com",
-    description="A comprehensive evaluation framework for synthetic data quality assessment",
-    long_description=read_readme(),
-    long_description_content_type="text/markdown",
-    url="https://github.com/yefyuan/SynEval",
-    packages=find_packages(),
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        "Topic :: Software Development :: Libraries :: Python Modules",
-    ],
-    python_requires=">=3.8",
-    install_requires=read_requirements(),
-    extras_require={
-        "dev": [
-            "pytest>=6.0",
-            "pytest-cov>=2.0",
-            "black>=21.0",
-            "flake8>=3.8",
-            "mypy>=0.800",
-        ],
-        "docs": [
-            "sphinx>=4.0",
-            "sphinx-rtd-theme>=1.0",
-        ],
-    },
-    entry_points={
-        "console_scripts": [
-            "syneval=syneval.cli:main",
-        ],
-    },
-    include_package_data=True,
-    package_data={
-        "syneval": ["*.txt", "*.md", "*.json"],
-    },
-    keywords="synthetic data, evaluation, machine learning, privacy, fidelity, utility, diversity",
-    project_urls={
-        "Bug Reports": "https://github.com/yefyuan/SynEval/issues",
-        "Source": "https://github.com/yefyuan/SynEval",
-        "Documentation": "https://github.com/yefyuan/SynEval#readme",
-    },
-) 
+def test_installation():
+    """Test if the installation is working properly."""
+    print("\n🧪 Testing installation...")
+    
+    try:
+        # Test basic NLTK functionality
+        from nltk.tokenize import word_tokenize, sent_tokenize
+        from nltk.corpus import stopwords
+        
+        # Test sentence tokenization
+        text = "Hello world! This is a test sentence. How are you?"
+        sentences = sent_tokenize(text)
+        print(f"✅ Sentence tokenization: {sentences}")
+        
+        # Test word tokenization
+        words = word_tokenize(text)
+        print(f"✅ Word tokenization: {words[:5]}...")
+        
+        # Test stopwords
+        stop_words = set(stopwords.words('english'))
+        print(f"✅ Stopwords loaded: {len(stop_words)} words")
+        
+        # Test other key dependencies
+        import pandas as pd
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        print("✅ Core dependencies (pandas, numpy, matplotlib, seaborn) working")
+        
+        print("🎉 Installation test passed!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Installation test failed: {e}")
+        return False
+
+def create_plots_directory():
+    """Create plots directory for output."""
+    plots_dir = "./plots"
+    os.makedirs(plots_dir, exist_ok=True)
+    print(f"📁 Created plots directory: {plots_dir}")
+
+def main():
+    """Main function to setup SynEval environment."""
+    print("🚀 SynEval Environment Setup")
+    print("=" * 40)
+    
+    # Install dependencies
+    if not install_requirements():
+        print("❌ Setup failed at dependency installation step.")
+        return 1
+    
+    # Download NLTK data
+    if not download_nltk_data():
+        print("❌ Setup failed at NLTK data download step.")
+        return 1
+    
+    # Create necessary directories
+    create_plots_directory()
+    
+    # Test installation
+    success = test_installation()
+    
+    if success:
+        print("\n✅ SynEval environment setup completed successfully!")
+        print("You can now run SynEval without any issues.")
+        print("\n📝 Next steps:")
+        print("  1. Run: python run.py --help")
+        print("  2. Check the README.md for usage examples")
+        print("  3. Example command:")
+        print("     python run.py --synthetic data.csv --original data.csv --metadata metadata.json --dimension fidelity --plot")
+    else:
+        print("\n⚠️ Setup completed with warnings.")
+        print("Some features may not work properly.")
+        print("💡 Try running the setup script again or check the error messages above.")
+    
+    return 0 if success else 1
+
+if __name__ == "__main__":
+    sys.exit(main()) 

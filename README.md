@@ -9,43 +9,70 @@ SynEval is a comprehensive evaluation framework for assessing the quality of syn
 
 ## Installation
 
-### From PyPI (Recommended)
-
-```bash
-pip install syneval
-```
-
-### From Source
-
 1. Clone the repository:
+
 ```bash
-git clone https://github.com/yefyuan/SynEval.git
+git clone https://github.com/SCU-TrustworthyAI/SynEval.git
 cd SynEval
 ```
 
-2. Install the package in development mode:
-```bash
-pip install -e .
-```
-
-### Development Installation
-
-For development and testing:
+2. (Optional) Create and activate a conda virtual environment:
 
 ```bash
-pip install -e ".[dev]"
+conda create -n syneval python=3.10
+conda activate syneval
 ```
 
-This installs additional development dependencies including pytest, black, flake8, and mypy.
+3. Prepare environment (one command):
+```bash
+python prepare_environment.py
+```
+
+This script will automatically:
+- Install all required Python packages from requirements.txt (with dependency conflict resolution)
+- Download required NLTK data packages (including punkt_tab)
+- Create necessary directories (plots/)
+- Test the installation
+
+**Note**: You may see dependency conflict warnings during installation. This is normal in environments like Google Colab or when other packages are already installed. These conflicts won't affect SynEval functionality.
+
+**For a clean installation without conflicts**, consider using a virtual environment:
+```bash
+conda create -n syneval python=3.10
+conda activate syneval
+python prepare_environment.py
+```
 
 ## Quick Start
+
+### Running SynEval Demo on Google Colab
+
+The easiest way to get started with SynEval is to run the demo notebook on Google Colab:
+
+1. **Open the Demo Notebook**: 
+   - Navigate to `SynEval_Demo.ipynb` in the repository
+   - Click "Open in Colab" or upload the notebook to Google Colab
+
+2. **Install Dependencies**:
+   - The notebook includes a setup cell that automatically installs all required dependencies
+   - Run the setup cell to prepare the environment
+
+3. **Run the Demo**:
+   - The notebook provides step-by-step examples of running SynEval evaluations
+   - Includes sample data and metadata for testing
+   - Demonstrates all four evaluation dimensions (fidelity, utility, diversity, privacy)
+
+4. **View Results**:
+   - Evaluation results are displayed inline with detailed explanations
+   - Plots are generated and shown directly in the notebook
+   - Results are also saved to files for further analysis
 
 ### Command Line Usage
 
 After installation, you can use SynEval from the command line:
 
 ```bash
-syneval \
+python run.py \
     --synthetic synthetic_data.csv \
     --original original_data.csv \
     --metadata metadata.json \
@@ -56,95 +83,12 @@ syneval \
     --plot
 ```
 
-### Python API Usage
-
-```python
-import pandas as pd
-from syneval import FidelityEvaluator, UtilityEvaluator, DiversityEvaluator, PrivacyEvaluator
-
-# Load your data
-synthetic_data = pd.read_csv('synthetic_data.csv')
-original_data = pd.read_csv('original_data.csv')
-
-# Define metadata
-metadata = {
-    "columns": {
-        "age": {"sdtype": "numerical"},
-        "rating": {"sdtype": "categorical", "values": [1, 2, 3, 4, 5]},
-        "text": {"sdtype": "text"}
-    },
-    "text_columns": ["text"]
-}
-
-# Run evaluations
-fidelity_evaluator = FidelityEvaluator(synthetic_data, original_data, metadata)
-fidelity_results = fidelity_evaluator.evaluate()
-
-utility_evaluator = UtilityEvaluator(
-    synthetic_data, original_data, metadata,
-    input_columns=["text"], output_columns=["rating"]
-)
-utility_results = utility_evaluator.evaluate()
-
-diversity_evaluator = DiversityEvaluator(synthetic_data, original_data, metadata)
-diversity_results = diversity_evaluator.evaluate()
-
-privacy_evaluator = PrivacyEvaluator(synthetic_data, original_data, metadata)
-privacy_results = privacy_evaluator.evaluate()
-```
-
-### Example
-
-See `examples/basic_usage.py` for a complete working example.
-
-### Troubleshooting Device Issues
-
-If you encounter CUDA/CPU tensor device errors, see `DEVICE_MANAGEMENT_FIX.md` for detailed solutions. The most common fix is to set the environment variable:
-
-```bash
-export CUDA_VISIBLE_DEVICES=""
-```
-
-Or add this at the beginning of your Python script:
-
-```python
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
-```
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - pandas
 - Additional dependencies will be installed automatically
-
-## Installation
-
-1. Clone the repository (Not ready):
-
-```bash
-git clone https://github.com/yefyuan/SynEval.git
-cd SynEval
-```
-
-2. Create and activate a conda virtual environment:
-
-```bash
-conda create -n syneval python=3.10
-conda activate syneval
-```
-
-3. Install nltk data
-```bash
-pip install certifi
-python download_nltk_data.py
-```
-
-4. Install the required dependencies:
-```bash
-pip install -r requirements.txt
-```
-
 
 ## Usage
 ### Running Evaluations
@@ -750,6 +694,254 @@ The framework performs several validation checks:
 1. Ensures all required files exist
 2. Validates that at least one evaluation type is selected
 3. Verifies that the metadata structure matches the data files
+
+## Additional Tools
+
+### Amazon Fashion Dataset - Named Entity Recognition Analysis
+
+SynEval includes a specialized tool for analyzing large text datasets using Named Entity Recognition (NER). The `amazon_fashion_ner_analysis_fast.py` script performs comprehensive NER analysis on the Amazon Fashion dataset, processing 10k+ records efficiently.
+
+#### Features
+
+- **Large Dataset Processing**: Efficiently handles 10k+ records with batch processing
+- **Entity Density Analysis**: Calculates and analyzes entity density for each text
+- **Comprehensive Reporting**: Generates multiple detailed report files
+- **Top 200 High Entity Texts**: Identifies and reports texts with the most entities
+- **Visualizations**: Creates charts and graphs for better understanding
+- **Caching**: Automatic caching for faster subsequent runs
+- **Progress Tracking**: Real-time progress bars for long-running operations
+
+
+#### Usage
+
+##### Basic Usage
+
+Simply run the script to analyze your entire dataset:
+
+```bash
+python amazon_fashion_ner_analysis_fast.py
+```
+
+##### Configuration Options
+
+You can modify the script to:
+- Use a subset of data for testing
+- Change the text column name
+- Adjust batch sizes for your hardware
+
+Edit the configuration section in the `main()` function:
+
+```python
+# Configuration
+csv_file = 'Amazon_Fashion.csv'
+text_column = 'text'
+sample_size = None  # Set to 10000 to test with first 10K records
+```
+
+#### Output Files
+
+The script generates several report files in the `./reports` directory:
+
+##### 1. Main Analysis Report
+- **File**: `amazon_fashion_ner_report_YYYYMMDD_HHMMSS.txt`
+- **Content**: 
+  - Dataset statistics
+  - Entity counts by type
+  - Overall entity density analysis
+  - Sample entities for each type
+
+##### 2. Top 200 High Entity Texts Report
+- **File**: `top_200_high_entity_texts_YYYYMMDD_HHMMSS.txt`
+- **Content**: 
+  - 200 texts with the highest entity counts
+  - Entity density for each text
+  - List of entities found in each text
+
+##### 3. Entity Density Analysis Report
+- **File**: `entity_density_analysis_YYYYMMDD_HHMMSS.txt`
+- **Content**:
+  - Detailed density statistics (mean, median, percentiles)
+  - Density distribution analysis
+  - Top 50 texts by entity density
+
+##### 4. Visualizations
+- **Files**: 
+  - `entity_distribution_YYYYMMDD_HHMMSS.png`
+  - `entity_density_histogram_YYYYMMDD_HHMMSS.png`
+  - `entity_count_vs_density_YYYYMMDD_HHMMSS.png`
+
+#### Entity Types Detected
+
+The script identifies and categorizes entities into:
+
+- **PER**: Person names (e.g., "John Smith", "Dr. Emily Brown")
+- **ORG**: Organizations (e.g., "Nike", "Adidas", "Amazon")
+- **LOC**: Locations (e.g., "New York", "California", "Paris")
+- **MISC**: Miscellaneous entities that don't fit other categories
+
+#### Entity Density Analysis
+
+Entity density is calculated as:
+```
+Entity Density = Number of Entities / Number of Tokens
+```
+
+The analysis provides:
+- **Statistical measures**: Mean, median, standard deviation, percentiles
+- **Distribution categories**:
+  - Low density (< 0.01): Minimal entity presence
+  - Medium density (0.01-0.05): Moderate entity presence
+  - High density (≥ 0.05): High entity presence
+
+#### Performance Considerations
+
+##### For Large Datasets (10k+ records)
+
+1. **Memory Usage**: The script processes data in batches to manage memory
+2. **Processing Time**: Expect 2-4 hours for full dataset analysis
+3. **Caching**: Results are cached for faster subsequent runs
+4. **Hardware Requirements**: 
+   - Minimum 8GB RAM
+   - Multi-core CPU recommended
+   - SSD storage for faster I/O
+
+##### Optimization Tips
+
+1. **Test with Subset**: Set `sample_size = 10000` to test with first 10K records
+2. **Adjust Batch Size**: Modify `batch_size` in `_process_entities_batch()` method
+3. **CPU Threads**: Adjust `torch.set_num_threads()` based on your CPU cores
+
+#### Sample Output
+
+##### Main Report Excerpt
+```
+================================================================================
+AMAZON FASHION DATASET - NAMED ENTITY RECOGNITION ANALYSIS
+================================================================================
+Generated on: 2024-01-15 14:30:25
+
+DATASET INFORMATION
+----------------------------------------
+Total texts analyzed: 2,500,000
+Total tokens: 45,678,901
+Total entities found: 1,234,567
+Average entities per text: 0.49
+
+ENTITY STATISTICS
+----------------------------------------
+Average entity density: 0.0270
+Risk level: low
+
+Entities by type:
+  PER: 456,789
+  ORG: 345,678
+  LOC: 234,567
+  MISC: 197,533
+
+ENTITY DENSITY ANALYSIS
+----------------------------------------
+Mean density: 0.0270
+Median density: 0.0150
+Standard deviation: 0.0450
+Min density: 0.0000
+Max density: 0.5000
+
+Density percentiles:
+  25th percentile: 0.0050
+  50th percentile: 0.0150
+  75th percentile: 0.0350
+  90th percentile: 0.0650
+  95th percentile: 0.0950
+  99th percentile: 0.1850
+
+Density distribution:
+  Low density (< 0.01): 1,250,000 texts
+  Medium density (0.01-0.05): 875,000 texts
+  High density (≥ 0.05): 375,000 texts
+```
+
+##### Top 200 Report Excerpt
+```
+================================================================================
+TOP 200 TEXTS WITH HIGHEST ENTITY COUNTS
+================================================================================
+Generated on: 2024-01-15 14:30:25
+
+  1. Entity Count: 15
+     Entity Density: 0.2500
+     Text: "Nike Air Max 90 shoes designed by John Smith in Portland, Oregon..."
+     Entities: Nike (ORG), Air Max 90 (MISC), John Smith (PER), Portland (LOC), Oregon (LOC)
+--------------------------------------------------------------------------------
+
+  2. Entity Count: 12
+     Entity Density: 0.2000
+     Text: "Adidas Ultraboost running shoes from Germany, designed by Dr. Sarah Johnson..."
+     Entities: Adidas (ORG), Ultraboost (MISC), Germany (LOC), Dr. Sarah Johnson (PER)
+--------------------------------------------------------------------------------
+```
+
+#### Troubleshooting
+
+##### Common Issues
+
+1. **Memory Errors**: Reduce batch size or use a subset of data
+2. **Slow Processing**: First run is slower due to model loading
+3. **File Not Found**: Ensure `Amazon_Fashion.csv` is in the correct directory
+4. **Column Not Found**: Check that the "text" column exists in your CSV
+
+##### Error Messages
+
+- `"Text column 'text' not found"`: Verify column name in your CSV file
+- `"Failed to load Flair NER model"`: Check internet connection for model download
+- Memory errors: Reduce `sample_size` or `batch_size`
+
+#### Advanced Usage
+
+##### Custom Analysis
+
+You can use the analyzer class directly for custom analysis:
+
+```python
+from amazon_fashion_ner_analysis_fast import AmazonFashionNERAnalyzer
+
+# Initialize analyzer
+analyzer = AmazonFashionNERAnalyzer()
+
+# Analyze with custom parameters
+results = analyzer.analyze_dataset(
+    csv_file='your_data.csv',
+    text_column='your_text_column',
+    sample_size=50000
+)
+
+# Generate custom reports
+analyzer.generate_report(results, output_dir='./custom_reports')
+```
+
+##### Batch Processing for Very Large Datasets
+
+For extremely large datasets, you can process in chunks:
+
+```python
+# Process in chunks of 100K records
+chunk_size = 100000
+total_records = 2500000
+
+for start_idx in range(0, total_records, chunk_size):
+    end_idx = min(start_idx + chunk_size, total_records)
+    # Process chunk from start_idx to end_idx
+    # Save intermediate results
+```
+
+#### Dependencies
+
+- **pandas**: Data manipulation and CSV reading
+- **numpy**: Numerical computations and statistics
+- **torch**: PyTorch for deep learning (Flair dependency)
+- **flair**: Flair NLP library for named entity recognition
+- **tqdm**: Progress bars for long-running operations
+- **matplotlib**: Plotting and visualization
+- **seaborn**: Enhanced plotting and statistical visualizations
 
 ## Contributing
 

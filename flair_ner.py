@@ -11,6 +11,7 @@ from flair.models import SequenceTagger
 import json
 from pathlib import Path
 import warnings
+import re # Added for phone number matching
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -97,39 +98,80 @@ class FlairNERProcessor:
                 # Process results
                 for sentence in sentences:
                     valid_entities = []
+                    privacy_risks = []
+                    
                     for entity in sentence.get_spans('ner'):
-                        # Skip if entity is too short or too long
-                        if len(entity.text) < 2 or len(entity.text) > 50:
-                            continue
-                            
-                        # Skip if entity is just a number or special character
-                        if entity.text.isdigit() or not any(c.isalnum() for c in entity.text):
-                            continue
-                            
-                        # Skip if entity contains URLs or email addresses
-                        if 'http' in entity.text.lower() or '@' in entity.text or '.' in entity.text.split()[-1]:
-                            continue
-                        
-                        # Skip if entity contains incomplete words or phrases
-                        if any(word.endswith('-') or word.endswith('&') for word in entity.text.split()):
-                            continue
-                        
-                        # Skip if entity is all uppercase (likely a label or category)
-                        if entity.text.isupper() and len(entity.text) > 1:
-                            continue
-                        
                         # Map Flair labels to our categories
                         label = entity.tag
                         if label.startswith('B-') or label.startswith('I-'):
                             label = label[2:]  # Remove B- or I- prefix
                         
+                        # Enhanced privacy-focused entity detection
+                        entity_text = entity.text.strip()
+                        
+                        # Skip only completely empty entities
+                        if not entity_text:
+                            continue
+                        
+                        # Enhanced privacy risk detection
+                        privacy_risk_type = None
+                        risk_score = 0
+                        
+                        # Check for email addresses (high privacy risk)
+                        if '@' in entity_text and '.' in entity_text:
+                            privacy_risk_type = 'EMAIL'
+                            risk_score = 10
+                        # Check for URLs (high privacy risk)
+                        elif any(protocol in entity_text.lower() for protocol in ['http://', 'https://', 'www.']):
+                            privacy_risk_type = 'URL'
+                            risk_score = 9
+                        # Check for phone numbers (high privacy risk)
+                        elif re.match(r'^[\+]?[1-9][\d]{0,15}$', entity_text.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')):
+                            privacy_risk_type = 'PHONE'
+                            risk_score = 8
+                        # Check for social security numbers (very high privacy risk)
+                        elif re.match(r'^\d{3}-?\d{2}-?\d{4}$', entity_text):
+                            privacy_risk_type = 'SSN'
+                            risk_score = 10
+                        # Check for credit card numbers (very high privacy risk)
+                        elif re.match(r'^\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}$', entity_text):
+                            privacy_risk_type = 'CREDIT_CARD'
+                            risk_score = 10
+                        # Check for IP addresses (medium privacy risk)
+                        elif re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', entity_text):
+                            privacy_risk_type = 'IP_ADDRESS'
+                            risk_score = 6
+                        # Check for all uppercase text (potential identifier)
+                        elif entity_text.isupper() and len(entity_text) > 1:
+                            privacy_risk_type = 'UPPERCASE_IDENTIFIER'
+                            risk_score = 4
+                        # Check for incomplete words (potential partial identifiers)
+                        elif any(word.endswith('-') for word in entity_text.split()):
+                            privacy_risk_type = 'INCOMPLETE_WORD'
+                            risk_score = 3
+                        # Check for special characters that might be identifiers
+                        elif any(char in entity_text for char in ['#', '@', '$', '%', '&', '*']):
+                            privacy_risk_type = 'SPECIAL_CHAR_IDENTIFIER'
+                            risk_score = 5
+                        
+                        # Accept all entities that match our categories
                         if label in {'PER', 'ORG', 'LOC', 'MISC'}:
-                            valid_entities.append((entity.text, label))
+                            valid_entities.append((entity_text, label))
+                            
+                            # Add privacy risk information if detected
+                            if privacy_risk_type:
+                                privacy_risks.append({
+                                    'entity': entity_text,
+                                    'type': label,
+                                    'privacy_risk_type': privacy_risk_type,
+                                    'risk_score': risk_score,
+                                    'original_label': entity.tag
+                                })
                     
                     # Count tokens (simple word count)
                     num_tokens = len(sentence.text.split())
                     
-                    results.append((valid_entities, len(valid_entities), num_tokens))
+                    results.append((valid_entities, len(valid_entities), num_tokens, privacy_risks))
                 
                 pbar.update(len(batch_texts))
         
@@ -137,14 +179,14 @@ class FlairNERProcessor:
 
     def analyze_named_entities(self, texts: List[str], dataset_name: str = "default") -> Dict:
         """
-        Analyze named entities in text data.
+        Analyze named entities in text data with enhanced privacy risk detection.
         
         Args:
             texts: List of text strings to analyze
             dataset_name: Name of the dataset for caching purposes
             
         Returns:
-            Dictionary containing entity analysis results
+            Dictionary containing entity analysis results with privacy risk assessment
         """
         # Check cache first
         cache_key = f"entities_{dataset_name}"
@@ -157,10 +199,13 @@ class FlairNERProcessor:
         # Process entities
         results = self._process_entities_batch(texts)
         
-        # Extract all entities
+        # Extract all entities and privacy risks
         all_entities = set()
-        for entities, _, _ in results:
+        all_privacy_risks = []
+        
+        for entities, _, _, privacy_risks in results:
             all_entities.update(entities)
+            all_privacy_risks.extend(privacy_risks)
         
         # Group entities by type
         entities_by_type = {}
@@ -169,15 +214,39 @@ class FlairNERProcessor:
                 entities_by_type[type_] = []
             entities_by_type[type_].append(entity)
         
+        # Group privacy risks by type
+        privacy_risks_by_type = {}
+        for risk in all_privacy_risks:
+            risk_type = risk['privacy_risk_type']
+            if risk_type not in privacy_risks_by_type:
+                privacy_risks_by_type[risk_type] = []
+            privacy_risks_by_type[risk_type].append(risk)
+        
         # Calculate statistics
         total_entities = len(all_entities)
-        total_tokens = sum(num_tokens for _, _, num_tokens in results)
+        total_tokens = sum(num_tokens for _, _, num_tokens, _ in results)
         avg_entity_density = total_entities / total_tokens if total_tokens > 0 else 0
+        
+        # Calculate privacy risk statistics
+        total_privacy_risks = len(all_privacy_risks)
+        avg_risk_score = sum(risk['risk_score'] for risk in all_privacy_risks) / total_privacy_risks if total_privacy_risks > 0 else 0
         
         # Count entities by type
         entity_counts = {}
         for entity_type, entities in entities_by_type.items():
             entity_counts[entity_type] = len(entities)
+        
+        # Count privacy risks by type
+        privacy_risk_counts = {}
+        for risk_type, risks in privacy_risks_by_type.items():
+            privacy_risk_counts[risk_type] = len(risks)
+        
+        # Determine overall risk level based on both entity density and privacy risks
+        risk_level = 'low'
+        if avg_entity_density > 0.1 or total_privacy_risks > 0:
+            risk_level = 'medium'
+        if avg_entity_density > 0.2 or total_privacy_risks > 10 or avg_risk_score > 7:
+            risk_level = 'high'
         
         analysis_results = {
             'total_entities': total_entities,
@@ -185,7 +254,19 @@ class FlairNERProcessor:
             'avg_entity_density': avg_entity_density,
             'entity_counts_by_type': entity_counts,
             'entities_by_type': entities_by_type,
-            'risk_level': 'high' if avg_entity_density > 0.1 else 'low'
+            'privacy_risks': {
+                'total_privacy_risks': total_privacy_risks,
+                'avg_risk_score': avg_risk_score,
+                'privacy_risk_counts': privacy_risk_counts,
+                'privacy_risks_by_type': privacy_risks_by_type,
+                'high_risk_entities': [risk for risk in all_privacy_risks if risk['risk_score'] >= 8]
+            },
+            'risk_level': risk_level,
+            'risk_factors': {
+                'entity_density_risk': avg_entity_density > 0.1,
+                'privacy_risk_present': total_privacy_risks > 0,
+                'high_risk_entities_present': len([r for r in all_privacy_risks if r['risk_score'] >= 8]) > 0
+            }
         }
         
         # Save to cache
@@ -196,7 +277,7 @@ class FlairNERProcessor:
 
     def extract_entities_from_text(self, text: str) -> List[Tuple[str, str]]:
         """
-        Extract named entities from a single text.
+        Extract named entities from a single text with enhanced privacy risk detection.
         
         Args:
             text: Input text string
@@ -209,28 +290,21 @@ class FlairNERProcessor:
         
         entities = []
         for entity in sentence.get_spans('ner'):
-            # Apply same filtering as batch processing
-            if len(entity.text) < 2 or len(entity.text) > 50:
-                continue
-                
-            if entity.text.isdigit() or not any(c.isalnum() for c in entity.text):
-                continue
-                
-            if 'http' in entity.text.lower() or '@' in entity.text or '.' in entity.text.split()[-1]:
-                continue
-            
-            if any(word.endswith('-') or word.endswith('&') for word in entity.text.split()):
-                continue
-            
-            if entity.text.isupper() and len(entity.text) > 1:
-                continue
-            
+            # Map Flair labels to our categories
             label = entity.tag
             if label.startswith('B-') or label.startswith('I-'):
                 label = label[2:]
             
+            # Enhanced privacy-focused entity detection
+            entity_text = entity.text.strip()
+            
+            # Skip only completely empty entities
+            if not entity_text:
+                continue
+                
+            # Accept all entities that match our categories
             if label in {'PER', 'ORG', 'LOC', 'MISC'}:
-                entities.append((entity.text, label))
+                entities.append((entity_text, label))
         
         return entities
 

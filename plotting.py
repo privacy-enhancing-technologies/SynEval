@@ -403,6 +403,9 @@ class SynEvalPlotter:
                                     if isinstance(lexical[ng], dict) and 'unique_ratio' in lexical[ng]:
                                         ngrams.append(ng)
                                         unique_ratios.append(lexical[ng]['unique_ratio'])
+                                    elif isinstance(lexical[ng], (int, float)):
+                                        # Skip non-dict values like sample_size
+                                        continue
                                     else:
                                         logger.warning(f"lexical[{ng}] is not a dict or missing 'unique_ratio' for column '{col_name}' in dataset '{dataset_type}': {lexical[ng]} (type: {type(lexical[ng])})")
                                 
