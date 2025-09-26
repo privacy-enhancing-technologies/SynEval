@@ -16,6 +16,54 @@ import hashlib
 import json
 import pickle
 from pathlib import Path
+from scipy.stats import spearmanr
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_selection import chi2
+from sklearn.cross_decomposition import CCA
+from sklearn.preprocessing import OneHotEncoder
+import re
+
+# 1. Sentiment-Rating Correlation
+from nltk.sentiment import SentimentIntensityAnalyzer
+
+def sentiment_rating_correlation(df, rating_col='rating', text_col='review'):
+    sia = SentimentIntensityAnalyzer()
+    sentiments = df[text_col].apply(lambda x: sia.polarity_scores(str(x))['compound'])
+    correlation, p_value = spearmanr(df[rating_col], sentiments)
+    return {'sentiment_rating_corr': correlation, 'p_value': p_value}
+
+# 2. Keyword-Category Correlation
+
+def keyword_category_correlation(df, category_col, text_col='review', top_n=50):
+    vectorizer = TfidfVectorizer(max_features=top_n, stop_words='english')
+    X = vectorizer.fit_transform(df[text_col].astype(str))
+    y = df[category_col]
+    chi2scores, p_values = chi2(X, y)
+    top_keywords = vectorizer.get_feature_names_out()
+    return pd.DataFrame({'keyword': top_keywords, 'chi2': chi2scores, 'p_value': p_values})
+
+# 3. Numeric-Length Correlation
+
+def numeric_length_correlation(df, numeric_col, text_col='review'):
+    lengths = df[text_col].apply(lambda x: len(str(x).split()))
+    correlation, p_value = spearmanr(df[numeric_col], lengths)
+    return {'length_numeric_corr': correlation, 'p_value': p_value}
+
+# 4. Semantic-Tabular Correlation
+
+def semantic_tabular_correlation(df, categorical_cols, text_embeddings):
+    encoder = OneHotEncoder().fit_transform(df[categorical_cols])
+    cca = CCA(n_components=1)
+    cca.fit(encoder.toarray(), text_embeddings)
+    X_c, Y_c = cca.transform(encoder.toarray(), text_embeddings)
+    correlation = np.corrcoef(X_c.T, Y_c.T)[0, 1]
+    return {'semantic_tabular_corr': correlation}
+
+# 5. PII-Text Leakage
+
+def pii_text_leakage(df, pii_col, text_col='review'):
+    leakage_rate = df.apply(lambda row: str(row[pii_col]) in str(row[text_col]), axis=1).mean()
+    return {'pii_text_leakage_rate': leakage_rate}
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -140,7 +188,8 @@ class UtilityEvaluator:
                  metadata: Dict,
                  input_columns: List[str],
                  output_columns: List[str],
-                 task_type: str = 'auto'):
+                 task_type: str = 'auto',
+                 selected_metrics: List[str] = None):
         """
         Initialize the utility evaluator.
         
@@ -174,6 +223,14 @@ class UtilityEvaluator:
                 logger.info("GPU acceleration available - using CUDA")
             else:
                 logger.info("GPU not available - using CPU")
+        
+        # Available metrics for selection
+        self.available_metrics = [
+            'tstr_accuracy', 'correlation_analysis'
+        ]
+        
+        # Use all metrics if none specified
+        self.selected_metrics = selected_metrics if selected_metrics else self.available_metrics
         
     def _determine_task_type(self, task_type: str) -> str:
         """Determine the type of task based on output columns."""
@@ -279,185 +336,240 @@ class UtilityEvaluator:
         Returns:
             Dict: Dictionary containing task information and classification reports for both models
         """
-        try:
-            # Get synthetic data size
-            syn_size = len(self.synthetic_data)
-            logger.info(f"Using all synthetic data ({syn_size} samples) for training")
-            
-            # Sample from real data for training
-            if len(self.original_data) > syn_size:
-                train_data = self.original_data.sample(n=syn_size, random_state=42)
-                remaining_data = self.original_data.drop(train_data.index)
-                # Sample same amount from remaining data for testing
-                test_data = remaining_data.sample(n=syn_size, random_state=43)
-            else:
-                train_data = self.original_data
-                test_data = pd.DataFrame()  # Empty test set if real data is smaller than synthetic
-                logger.warning("Real data is smaller than synthetic data. No test set available.")
-            
-            logger.info(f"Training size: {syn_size}, Test size: {len(test_data)}")
-            
-            # Prepare features and targets for all datasets
-            # Training data (real)
-            X_train_real = train_data[self.input_columns]
-            y_train_real = train_data[self.output_columns]
-            
-            # Training data (synthetic)
-            X_train_syn = self.synthetic_data[self.input_columns]
-            y_train_syn = self.synthetic_data[self.output_columns]
-            
-            # Test data (from remaining real data)
-            if not test_data.empty:
-                X_test = test_data[self.input_columns]
-                y_test = test_data[self.output_columns]
-            else:
-                return {
-                    'error': 'No test data available - real data is smaller than synthetic data',
+        results = {}
+        
+        # Only run TSTR if selected
+        if 'tstr_accuracy' in self.selected_metrics:
+            try:
+                # Get synthetic data size
+                syn_size = len(self.synthetic_data)
+                logger.info(f"Using all synthetic data ({syn_size} samples) for training")
+                
+                # Sample from real data for training
+                if len(self.original_data) > syn_size:
+                    train_data = self.original_data.sample(n=syn_size, random_state=42)
+                    remaining_data = self.original_data.drop(train_data.index)
+                    # Sample same amount from remaining data for testing
+                    test_data = remaining_data.sample(n=syn_size, random_state=43)
+                else:
+                    train_data = self.original_data
+                    test_data = pd.DataFrame()  # Empty test set if real data is smaller than synthetic
+                    logger.warning("Real data is smaller than synthetic data. No test set available.")
+                
+                logger.info(f"Training size: {syn_size}, Test size: {len(test_data)}")
+                
+                # Prepare features and targets for all datasets
+                # Training data (real)
+                X_train_real = train_data[self.input_columns]
+                y_train_real = train_data[self.output_columns]
+                
+                # Training data (synthetic)
+                X_train_syn = self.synthetic_data[self.input_columns]
+                y_train_syn = self.synthetic_data[self.output_columns]
+                
+                # Test data (from remaining real data)
+                if not test_data.empty:
+                    X_test = test_data[self.input_columns]
+                    y_test = test_data[self.output_columns]
+                else:
+                    results['tstr_accuracy'] = {
+                        'error': 'No test data available - real data is smaller than synthetic data',
+                        'task_type': self.task_type,
+                        'input_columns': self.input_columns,
+                        'output_columns': self.output_columns
+                    }
+                    return results
+                
+                # Handle text columns and prepare features
+                text_columns = [col for col in self.input_columns 
+                              if col in self.metadata['columns'] and 
+                              self.metadata['columns'][col]['sdtype'] == 'text']
+                
+                if text_columns:
+                    # Initialize vectorizer
+                    vectorizer = TfidfVectorizer(max_features=1000)
+                    
+                    # Fit vectorizer on training data and transform all datasets
+                    X_train_real = vectorizer.fit_transform(X_train_real[text_columns[0]].fillna(''))
+                    X_train_syn = vectorizer.transform(X_train_syn[text_columns[0]].fillna(''))
+                    X_test = vectorizer.transform(X_test[text_columns[0]].fillna(''))
+                    
+                    # Convert to GPU tensors if available for faster computation
+                    if DEVICE == 'cuda':
+                        import torch
+                        X_train_real = torch.tensor(X_train_real.toarray(), device='cuda', dtype=torch.float32)
+                        X_train_syn = torch.tensor(X_train_syn.toarray(), device='cuda', dtype=torch.float32)
+                        X_test = torch.tensor(X_test.toarray(), device='cuda', dtype=torch.float32)
+                    else:
+                        # Convert to dense arrays if needed
+                        X_train_real = X_train_real.toarray()
+                        X_train_syn = X_train_syn.toarray()
+                        X_test = X_test.toarray()
+                
+                # Handle non-text columns if any
+                other_columns = [col for col in self.input_columns if col not in text_columns]
+                if other_columns:
+                    # Fill NaN values with 0 for numerical columns
+                    X_train_real_other = train_data[other_columns].fillna(0).values
+                    X_train_syn_other = self.synthetic_data[other_columns].fillna(0).values
+                    X_test_other = test_data[other_columns].fillna(0).values
+                    
+                    # Convert to GPU tensors if available
+                    if DEVICE == 'cuda':
+                        import torch
+                        X_train_real_other = torch.tensor(X_train_real_other, device='cuda', dtype=torch.float32)
+                        X_train_syn_other = torch.tensor(X_train_syn_other, device='cuda', dtype=torch.float32)
+                        X_test_other = torch.tensor(X_test_other, device='cuda', dtype=torch.float32)
+                    
+                    # Combine with text features if they exist
+                    if text_columns:
+                        if DEVICE == 'cuda':
+                            X_train_real = torch.cat([X_train_real, X_train_real_other], dim=1)
+                            X_train_syn = torch.cat([X_train_syn, X_train_syn_other], dim=1)
+                            X_test = torch.cat([X_test, X_test_other], dim=1)
+                        else:
+                            X_train_real = np.hstack([X_train_real, X_train_real_other])
+                            X_train_syn = np.hstack([X_train_syn, X_train_syn_other])
+                            X_test = np.hstack([X_test, X_test_other])
+                    else:
+                        X_train_real = X_train_real_other
+                        X_train_syn = X_train_syn_other
+                        X_test = X_test_other
+                
+                # Handle target variable
+                if isinstance(y_train_real, pd.DataFrame):
+                    y_train_real = y_train_real[self.output_columns[0]]
+                    y_train_syn = y_train_syn[self.output_columns[0]]
+                    y_test = y_test[self.output_columns[0]]
+                
+                # Fill NaN values in target
+                y_train_real = y_train_real.fillna(y_train_real.mean() if self.task_type == 'regression' else y_train_real.mode().iloc[0])
+                y_train_syn = y_train_syn.fillna(y_train_syn.mean() if self.task_type == 'regression' else y_train_syn.mode().iloc[0])
+                y_test = y_test.fillna(y_test.mean() if self.task_type == 'regression' else y_test.mode().iloc[0])
+                
+                # For classification tasks, ensure all datasets have the same class labels
+                if self.task_type in ['classification', 'text_classification']:
+                    # Get all unique values from all datasets
+                    all_values = set()
+                    all_values.update(y_train_real.unique())
+                    all_values.update(y_train_syn.unique())
+                    all_values.update(y_test.unique())
+                    
+                    # Convert to sorted list for consistent ordering
+                    all_values = sorted(list(all_values))
+                    logger.info(f"All unique target values: {all_values}")
+                    
+                    # Create label encoder to map values to 0, 1, 2, ...
+                    from sklearn.preprocessing import LabelEncoder
+                    label_encoder = LabelEncoder()
+                    label_encoder.fit(all_values)
+                    
+                    # Transform all target variables
+                    y_train_real = label_encoder.transform(y_train_real)
+                    y_train_syn = label_encoder.transform(y_train_syn)
+                    y_test = label_encoder.transform(y_test)
+                    
+                    logger.info(f"Encoded classes: {label_encoder.classes_}")
+                    logger.info(f"Expected class range: 0 to {len(all_values)-1}")
+                
+                # Train two separate models
+                model_real = self._get_model()
+                model_syn = self._get_model()
+                
+                # Convert data back to CPU if using GPU tensors for scikit-learn models
+                if DEVICE == 'cuda' and not hasattr(model_real, 'tree_method'):  # Not XGBoost
+                    import torch
+                    X_train_real_cpu = X_train_real.cpu().numpy()
+                    X_train_syn_cpu = X_train_syn.cpu().numpy()
+                    X_test_cpu = X_test.cpu().numpy()
+                else:
+                    X_train_real_cpu = X_train_real
+                    X_train_syn_cpu = X_train_syn
+                    X_test_cpu = X_test
+                
+                # Train on real data
+                logger.info("Training model on real data...")
+                model_real.fit(X_train_real_cpu, y_train_real)
+                real_pred = model_real.predict(X_test_cpu)
+                
+                # Train on synthetic data
+                logger.info("Training model on synthetic data...")
+                model_syn.fit(X_train_syn_cpu, y_train_syn)
+                syn_pred = model_syn.predict(X_test_cpu)
+                
+                # Get classification reports
+                from sklearn.metrics import classification_report
+                real_report = classification_report(y_test, real_pred, output_dict=True)
+                syn_report = classification_report(y_test, syn_pred, output_dict=True)
+                
+                results['tstr_accuracy'] = {
+                    'task_type': self.task_type,
+                    'input_columns': self.input_columns,
+                    'output_columns': self.output_columns,
+                    'training_size': syn_size,
+                    'test_size': len(test_data),
+                    'total_samples': len(self.original_data),
+                    'real_data_model': real_report,
+                    'synthetic_data_model': syn_report
+                }
+                
+            except Exception as e:
+                logger.error(f"Error in TSTR evaluation: {str(e)}")
+                results['tstr_accuracy'] = {
+                    'error': str(e),
                     'task_type': self.task_type,
                     'input_columns': self.input_columns,
                     'output_columns': self.output_columns
                 }
-            
-            # Handle text columns and prepare features
-            text_columns = [col for col in self.input_columns 
-                          if col in self.metadata['columns'] and 
-                          self.metadata['columns'][col]['sdtype'] == 'text']
-            
-            if text_columns:
-                # Initialize vectorizer
-                vectorizer = TfidfVectorizer(max_features=1000)
-                
-                # Fit vectorizer on training data and transform all datasets
-                X_train_real = vectorizer.fit_transform(X_train_real[text_columns[0]].fillna(''))
-                X_train_syn = vectorizer.transform(X_train_syn[text_columns[0]].fillna(''))
-                X_test = vectorizer.transform(X_test[text_columns[0]].fillna(''))
-                
-                # Convert to GPU tensors if available for faster computation
-                if DEVICE == 'cuda':
-                    import torch
-                    X_train_real = torch.tensor(X_train_real.toarray(), device='cuda', dtype=torch.float32)
-                    X_train_syn = torch.tensor(X_train_syn.toarray(), device='cuda', dtype=torch.float32)
-                    X_test = torch.tensor(X_test.toarray(), device='cuda', dtype=torch.float32)
-                else:
-                    # Convert to dense arrays if needed
-                    X_train_real = X_train_real.toarray()
-                    X_train_syn = X_train_syn.toarray()
-                    X_test = X_test.toarray()
-            
-            # Handle non-text columns if any
-            other_columns = [col for col in self.input_columns if col not in text_columns]
-            if other_columns:
-                # Fill NaN values with 0 for numerical columns
-                X_train_real_other = train_data[other_columns].fillna(0).values
-                X_train_syn_other = self.synthetic_data[other_columns].fillna(0).values
-                X_test_other = test_data[other_columns].fillna(0).values
-                
-                # Convert to GPU tensors if available
-                if DEVICE == 'cuda':
-                    import torch
-                    X_train_real_other = torch.tensor(X_train_real_other, device='cuda', dtype=torch.float32)
-                    X_train_syn_other = torch.tensor(X_train_syn_other, device='cuda', dtype=torch.float32)
-                    X_test_other = torch.tensor(X_test_other, device='cuda', dtype=torch.float32)
-                
-                # Combine with text features if they exist
-                if text_columns:
-                    if DEVICE == 'cuda':
-                        X_train_real = torch.cat([X_train_real, X_train_real_other], dim=1)
-                        X_train_syn = torch.cat([X_train_syn, X_train_syn_other], dim=1)
-                        X_test = torch.cat([X_test, X_test_other], dim=1)
-                    else:
-                        X_train_real = np.hstack([X_train_real, X_train_real_other])
-                        X_train_syn = np.hstack([X_train_syn, X_train_syn_other])
-                        X_test = np.hstack([X_test, X_test_other])
-                else:
-                    X_train_real = X_train_real_other
-                    X_train_syn = X_train_syn_other
-                    X_test = X_test_other
-            
-            # Handle target variable
-            if isinstance(y_train_real, pd.DataFrame):
-                y_train_real = y_train_real[self.output_columns[0]]
-                y_train_syn = y_train_syn[self.output_columns[0]]
-                y_test = y_test[self.output_columns[0]]
-            
-            # Fill NaN values in target
-            y_train_real = y_train_real.fillna(y_train_real.mean() if self.task_type == 'regression' else y_train_real.mode().iloc[0])
-            y_train_syn = y_train_syn.fillna(y_train_syn.mean() if self.task_type == 'regression' else y_train_syn.mode().iloc[0])
-            y_test = y_test.fillna(y_test.mean() if self.task_type == 'regression' else y_test.mode().iloc[0])
-            
-            # For classification tasks, ensure all datasets have the same class labels
-            if self.task_type in ['classification', 'text_classification']:
-                # Get all unique values from all datasets
-                all_values = set()
-                all_values.update(y_train_real.unique())
-                all_values.update(y_train_syn.unique())
-                all_values.update(y_test.unique())
-                
-                # Convert to sorted list for consistent ordering
-                all_values = sorted(list(all_values))
-                logger.info(f"All unique target values: {all_values}")
-                
-                # Create label encoder to map values to 0, 1, 2, ...
-                from sklearn.preprocessing import LabelEncoder
-                label_encoder = LabelEncoder()
-                label_encoder.fit(all_values)
-                
-                # Transform all target variables
-                y_train_real = label_encoder.transform(y_train_real)
-                y_train_syn = label_encoder.transform(y_train_syn)
-                y_test = label_encoder.transform(y_test)
-                
-                logger.info(f"Encoded classes: {label_encoder.classes_}")
-                logger.info(f"Expected class range: 0 to {len(all_values)-1}")
-            
-            # Train two separate models
-            model_real = self._get_model()
-            model_syn = self._get_model()
-            
-            # Convert data back to CPU if using GPU tensors for scikit-learn models
-            if DEVICE == 'cuda' and not hasattr(model_real, 'tree_method'):  # Not XGBoost
-                import torch
-                X_train_real_cpu = X_train_real.cpu().numpy()
-                X_train_syn_cpu = X_train_syn.cpu().numpy()
-                X_test_cpu = X_test.cpu().numpy()
-            else:
-                X_train_real_cpu = X_train_real
-                X_train_syn_cpu = X_train_syn
-                X_test_cpu = X_test
-            
-            # Train on real data
-            logger.info("Training model on real data...")
-            model_real.fit(X_train_real_cpu, y_train_real)
-            real_pred = model_real.predict(X_test_cpu)
-            
-            # Train on synthetic data
-            logger.info("Training model on synthetic data...")
-            model_syn.fit(X_train_syn_cpu, y_train_syn)
-            syn_pred = model_syn.predict(X_test_cpu)
-            
-            # Get classification reports
-            from sklearn.metrics import classification_report
-            real_report = classification_report(y_test, real_pred, output_dict=True)
-            syn_report = classification_report(y_test, syn_pred, output_dict=True)
-            
-            results = {
-                'task_type': self.task_type,
-                'input_columns': self.input_columns,
-                'output_columns': self.output_columns,
-                'training_size': syn_size,
-                'test_size': len(test_data),
-                'total_samples': len(self.original_data),
-                'real_data_model': real_report,
-                'synthetic_data_model': syn_report
+        
+        # Only run correlation analysis if selected
+        if 'correlation_analysis' in self.selected_metrics:
+            # This would be implemented separately or use the existing evaluate_correlation method
+            results['correlation_analysis'] = {
+                'note': 'Correlation analysis requires specific correlation types to be specified'
             }
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error in utility evaluation: {str(e)}")
-            return {
-                'error': str(e),
-                'task_type': self.task_type,
-                'input_columns': self.input_columns,
-                'output_columns': self.output_columns
-            }
+        
+        return results
+
+    def evaluate_correlation(self, correlation_types, **kwargs):
+        """
+        Evaluate selected cross-modality correlation metrics.
+        correlation_types: list of str, e.g. ['sentiment_rating', 'keyword_category']
+        kwargs: extra params for each correlation type
+        """
+        results = {}
+        df = self.synthetic_data  # or allow user to choose real/syn
+        for corr in correlation_types:
+            if corr == 'sentiment_rating':
+                results['sentiment_rating'] = sentiment_rating_correlation(
+                    df,
+                    rating_col=kwargs.get('rating_col', 'rating'),
+                    text_col=kwargs.get('text_col', 'review')
+                )
+            elif corr == 'keyword_category':
+                results['keyword_category'] = keyword_category_correlation(
+                    df,
+                    category_col=kwargs.get('category_col', 'category'),
+                    text_col=kwargs.get('text_col', 'review'),
+                    top_n=kwargs.get('top_n', 50)
+                ).to_dict(orient='records')
+            elif corr == 'numeric_length':
+                results['numeric_length'] = numeric_length_correlation(
+                    df,
+                    numeric_col=kwargs.get('numeric_col', 'price'),
+                    text_col=kwargs.get('text_col', 'review')
+                )
+            elif corr == 'semantic_tabular':
+                # 需要用户传入 text_embeddings
+                results['semantic_tabular'] = semantic_tabular_correlation(
+                    df,
+                    categorical_cols=kwargs.get('categorical_cols', ['category']),
+                    text_embeddings=kwargs['text_embeddings']
+                )
+            elif corr == 'pii_text_leakage':
+                results['pii_text_leakage'] = pii_text_leakage(
+                    df,
+                    pii_col=kwargs.get('pii_col', 'user_id'),
+                    text_col=kwargs.get('text_col', 'review')
+                )
+        return results

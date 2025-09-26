@@ -1,0 +1,42 @@
+{
+  "columns": {
+    "guest_email": {
+      "sdtype": "categorical",
+      "pii": true
+    },
+    "has_rewards": {
+      "sdtype": "boolean",
+      "values": [true, false]
+    },
+    "room_type": {
+      "sdtype": "categorical",
+      "values": ["BASIC", "DELUXE", "SUITE", "PREMIUM"]
+    },
+    "amenities_fee": {
+      "sdtype": "numerical"
+    },
+    "checkin_date": {
+      "sdtype": "datetime"
+    },
+    "checkout_date": {
+      "sdtype": "datetime"
+    },
+    "room_rate": {
+      "sdtype": "numerical"
+    },
+    "billing_address": {
+      "sdtype": "text",
+      "pii": true
+    },
+    "credit_card_number": {
+      "sdtype": "categorical",
+      "pii": true
+    }
+  },
+  "text_columns": ["billing_address"],
+  "utility": {
+    "input_columns": ["guest_email", "has_rewards", "room_type", "amenities_fee", "checkin_date", "checkout_date", "room_rate", "billing_address"],
+    "output_columns": ["credit_card_number"],
+    "task_type": "classification"
+  }
+} 

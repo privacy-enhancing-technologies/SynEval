@@ -32,6 +32,7 @@ import json
 import hashlib
 from pathlib import Path
 import pickle
+from sklearn.neighbors import NearestNeighbors
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -39,9 +40,25 @@ warnings.filterwarnings('ignore')
 # Device management for Flair models
 import torch
 
-# Download required NLTK data
-nltk.download('punkt', quiet=True)
-nltk.download('stopwords', quiet=True)
+# Set up local NLTK data directory
+import os
+nltk_data_dir = os.path.join(os.path.dirname(__file__), 'nltk_data')
+if not os.path.exists(nltk_data_dir):
+    os.makedirs(nltk_data_dir)
+
+# Add local directory to NLTK data path
+nltk.data.path.insert(0, nltk_data_dir)
+
+# Download required NLTK data to local directory
+def download_nltk_data_if_needed(package_name):
+    try:
+        nltk.data.find(f'tokenizers/{package_name}' if package_name in ['punkt', 'punkt_tab'] else f'corpora/{package_name}')
+    except LookupError:
+        nltk.download(package_name, download_dir=nltk_data_dir, quiet=True)
+
+download_nltk_data_if_needed('punkt')
+download_nltk_data_if_needed('stopwords')
+download_nltk_data_if_needed('punkt_tab')
 
 # Global model cache
 _model_cache = {}
@@ -75,6 +92,156 @@ def compute_dataset_fingerprint(data: pd.DataFrame, metadata: Dict) -> str:
     # Convert to string and hash
     fingerprint_str = json.dumps(fingerprint_data, sort_keys=True)
     return hashlib.sha256(fingerprint_str.encode()).hexdigest()
+
+# 1. Identical Match Share (IMS)
+def identical_match_share(syn_df, train_df, key_cols=None):
+    """
+    计算合成数据与训练数据完全一致的行占比。
+    key_cols: 指定主键或全部列
+    返回：ims分数、判定结果、详细说明
+    """
+    if key_cols is None:
+        # Use all common columns for IMS calculation
+        key_cols = list(set(syn_df.columns) & set(train_df.columns))
+    
+    # Convert all values to strings for consistent comparison
+    syn_set = set()
+    for _, row in syn_df[key_cols].iterrows():
+        syn_set.add(tuple(str(val) for val in row.values))
+    
+    train_set = set()
+    for _, row in train_df[key_cols].iterrows():
+        train_set.add(tuple(str(val) for val in row.values))
+    
+    ims_syn_train = len(syn_set & train_set) / len(syn_set) if len(syn_set) > 0 else 0
+    
+    # 训练-测试间的IMS（假设train_df有test_df可用，否则用train自身shuffle）
+    train_test_ims = 0
+    if hasattr(train_df, 'test_df') and train_df.test_df is not None:
+        test_set = set()
+        for _, row in train_df.test_df[key_cols].iterrows():
+            test_set.add(tuple(str(val) for val in row.values))
+        train_test_ims = len(train_set & test_set) / len(train_set) if len(train_set) > 0 else 0
+    else:
+        # fallback: train自身shuffle
+        shuffled = train_df.sample(frac=1, random_state=42).reset_index(drop=True)
+        shuffled_set = set()
+        for _, row in shuffled[key_cols].iterrows():
+            shuffled_set.add(tuple(str(val) for val in row.values))
+        train_test_ims = len(train_set & shuffled_set) / len(train_set) if len(train_set) > 0 else 0
+    
+    passed = ims_syn_train <= train_test_ims
+    return {
+        'ims_syn_train': ims_syn_train,
+        'train_test_ims': train_test_ims,
+        'passed': passed,
+        'method': 'Identical Match Share (IMS)',
+        'desc': f'Synthetic-Train IMS: {ims_syn_train:.4f}, Train-Test IMS: {train_test_ims:.4f}, Passed: {"Yes" if passed else "No"}'
+    }
+
+def prepare_tabular_features(df, cols):
+    """Prepare features by encoding categorical and boolean data."""
+    df_copy = df[cols].copy()
+    
+    # Handle datetime columns
+    datetime_cols = []
+    for col in cols:
+        if df_copy[col].dtype == 'datetime64[ns]' or 'datetime' in str(df_copy[col].dtype):
+            datetime_cols.append(col)
+            # Convert datetime to numeric (days since epoch, not seconds)
+            df_copy[col] = pd.to_datetime(df_copy[col]).dt.tz_localize(None).astype(np.int64) // (10**9 * 86400)
+    
+    # Handle categorical and boolean columns
+    categorical_cols = df_copy.select_dtypes(include=['object', 'category', 'bool']).columns
+    if len(categorical_cols) > 0:
+        # One-hot encode categorical columns
+        df_copy = pd.get_dummies(df_copy, columns=categorical_cols, dummy_na=True)
+    
+    # Fill missing values
+    df_copy = df_copy.fillna(0)
+    
+    # Convert to numeric array
+    return df_copy.astype(float).values
+
+# 2. Distance to Closest Records (DCR)
+def distance_to_closest_records(syn_df, train_df, feature_cols):
+    """
+    计算每条合成数据到训练集最近邻的距离分布，并与训练集自身分布对比。
+    返回：5%分位数、判定结果、详细说明
+    """
+    try:
+        X_syn = prepare_tabular_features(syn_df, feature_cols)
+        X_train = prepare_tabular_features(train_df, feature_cols)
+        
+        # Ensure we have valid data
+        if X_syn.shape[1] == 0 or X_train.shape[1] == 0:
+            return {
+                'error': 'No valid features after preprocessing',
+                'method': 'Distance to Closest Records (DCR)'
+            }
+        
+        nn = NearestNeighbors(n_neighbors=2, metric='euclidean').fit(X_train)
+        # 合成-训练最近距离
+        dists_syn_train, _ = nn.kneighbors(X_syn, n_neighbors=1)
+        dists_syn_train = dists_syn_train.flatten()
+        syn_train_5pct = np.percentile(dists_syn_train, 5)
+        # 训练自身最近距离（排除自身）
+        dists_train_train, idxs = nn.kneighbors(X_train, n_neighbors=2)
+        dists_train_train = dists_train_train[:, 1]  # 跳过自身
+        train_train_5pct = np.percentile(dists_train_train, 5)
+        passed = syn_train_5pct >= train_train_5pct
+        return {
+            'syn_train_5pct': syn_train_5pct,
+            'train_train_5pct': train_train_5pct,
+            'passed': passed,
+            'method': 'Distance to Closest Records (DCR)',
+            'desc': f'Synthetic-Train 5%: {syn_train_5pct:.4f}, Train-Train 5%: {train_train_5pct:.4f}, Passed: {"Yes" if passed else "No"}'
+        }
+    except Exception as e:
+        return {
+            'error': f'DCR calculation failed: {str(e)}',
+            'method': 'Distance to Closest Records (DCR)'
+        }
+
+# 3. Nearest Neighbor Distance Ratio (NNDR)
+def nearest_neighbor_distance_ratio(syn_df, train_df, feature_cols):
+    """
+    计算每条数据到最近邻和次近邻的距离比值分布，并与训练集自身分布对比。
+    返回：5%分位数、判定结果、详细说明
+    """
+    try:
+        X_syn = prepare_tabular_features(syn_df, feature_cols)
+        X_train = prepare_tabular_features(train_df, feature_cols)
+        
+        # Ensure we have valid data
+        if X_syn.shape[1] == 0 or X_train.shape[1] == 0:
+            return {
+                'error': 'No valid features after preprocessing',
+                'method': 'Nearest Neighbor Distance Ratio (NNDR)'
+            }
+        
+        nn = NearestNeighbors(n_neighbors=3, metric='euclidean').fit(X_train)
+        # 合成-训练最近邻距离比
+        dists_syn_train, _ = nn.kneighbors(X_syn, n_neighbors=2)
+        ratio_syn = dists_syn_train[:, 1] / (dists_syn_train[:, 0] + 1e-8)
+        syn_train_5pct = np.percentile(ratio_syn, 5)
+        # 训练自身最近邻距离比（排除自身）
+        dists_train_train, _ = nn.kneighbors(X_train, n_neighbors=3)
+        ratio_train = dists_train_train[:, 2] / (dists_train_train[:, 1] + 1e-8)
+        train_train_5pct = np.percentile(ratio_train, 5)
+        passed = syn_train_5pct >= train_train_5pct
+        return {
+            'syn_train_5pct': syn_train_5pct,
+            'train_train_5pct': train_train_5pct,
+            'passed': passed,
+            'method': 'Nearest Neighbor Distance Ratio (NNDR)',
+            'desc': f'Synthetic-Train 5%: {syn_train_5pct:.4f}, Train-Train 5%: {train_train_5pct:.4f}, Passed: {"Yes" if passed else "No"}'
+        }
+    except Exception as e:
+        return {
+            'error': f'NNDR calculation failed: {str(e)}',
+            'method': 'Nearest Neighbor Distance Ratio (NNDR)'
+        }
 
 class SmartCache:
     """Smart cache system with dataset fingerprinting."""
@@ -172,7 +339,7 @@ def ensure_tensor_device(tensor, device):
     return tensor
 
 class PrivacyEvaluator:
-    def __init__(self, synthetic_data: pd.DataFrame, original_data: pd.DataFrame, metadata: Dict):
+    def __init__(self, synthetic_data: pd.DataFrame, original_data: pd.DataFrame, metadata: Dict, selected_metrics: List[str] = None):
         """
         Initialize the privacy evaluator.
         
@@ -193,6 +360,14 @@ class PrivacyEvaluator:
         self.original_fingerprint = compute_dataset_fingerprint(original_data, metadata)
         self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
         
+        # Available metrics for selection
+        self.available_metrics = [
+            'exact_matches', 'membership_inference', 'tabular_privacy', 'text_privacy', 'anonymeter'
+        ]
+        
+        # Use all metrics if none specified
+        self.selected_metrics = selected_metrics if selected_metrics else self.available_metrics
+        
         # Detect best available device
         if torch.cuda.is_available():
             self.device = torch.device('cuda')
@@ -211,12 +386,22 @@ class PrivacyEvaluator:
             raise
         
         # Initialize spaCy for additional linguistic features
+        self.nlp = None
         try:
             self.nlp = spacy.load("en_core_web_sm")
+            self.logger.info("spaCy model loaded successfully")
         except OSError:
-            self.logger.warning("Downloading spaCy model...")
-            spacy.cli.download("en_core_web_sm")
-            self.nlp = spacy.load("en_core_web_sm")
+            self.logger.warning("spaCy model not found, attempting to download...")
+            try:
+                spacy.cli.download("en_core_web_sm")
+                self.nlp = spacy.load("en_core_web_sm")
+                self.logger.info("spaCy model downloaded and loaded successfully")
+            except Exception as e:
+                self.logger.warning(f"Failed to download spaCy model: {str(e)}")
+                self.nlp = None
+        except Exception as e:
+            self.logger.warning(f"Failed to load spaCy model: {str(e)}")
+            self.nlp = None
         
         # Initialize stopwords
         self.stop_words = set(stopwords.words('english'))
@@ -245,35 +430,43 @@ class PrivacyEvaluator:
 
     def evaluate(self) -> Dict:
         """
-        Run all privacy evaluations and return results.
+        Run selected privacy evaluations and return results.
         """
-        self.logger.info("Starting comprehensive privacy evaluation...")
+        self.logger.info("Starting privacy evaluation...")
         
-        results = {
-            'exact_matches': self._evaluate_exact_matches(),
-            'membership_inference': self._evaluate_membership_inference()
-        }
+        results = {}
+        
+        if 'exact_matches' in self.selected_metrics:
+            results['exact_matches'] = self._evaluate_exact_matches()
+        
+        if 'membership_inference' in self.selected_metrics:
+            results['membership_inference'] = self._evaluate_membership_inference()
         
         # Add data type specific evaluations
-        if self._is_text_data():
-            self.logger.info("Running text-specific privacy evaluations...")
-            results.update(self._evaluate_text_privacy())
-        else:
+        # For mixed data (both text and structured), run both evaluations
+        if 'tabular_privacy' in self.selected_metrics:
             self.logger.info("Running tabular data privacy evaluations...")
-            results.update(self._evaluate_tabular_privacy())
+            tabular_results = self._evaluate_tabular_privacy()
+            results.update(tabular_results)
+            
+        if 'text_privacy' in self.selected_metrics and self._is_text_data():
+            self.logger.info("Running text-specific privacy evaluations...")
+            text_results = self._evaluate_text_privacy()
+            results.update(text_results)
             
         # Add Anonymeter evaluations
-        self.logger.info("Running Anonymeter privacy evaluations...")
-        try:
-            anonymeter_results = self._evaluate_reidentification_risks()
-            results['anonymeter'] = anonymeter_results
-            self.logger.info("Anonymeter evaluations completed successfully")
-        except Exception as e:
-            self.logger.error(f"Anonymeter evaluation failed: {str(e)}")
-            results['anonymeter'] = {
-                'error': f"Anonymeter evaluation failed: {str(e)}",
-                'risk_level': 'unknown'
-            }
+        if 'anonymeter' in self.selected_metrics:
+            self.logger.info("Running Anonymeter privacy evaluations...")
+            try:
+                anonymeter_results = self._evaluate_reidentification_risks()
+                results['anonymeter'] = anonymeter_results
+                self.logger.info("Anonymeter evaluations completed successfully")
+            except Exception as e:
+                self.logger.error(f"Anonymeter evaluation failed: {str(e)}")
+                results['anonymeter'] = {
+                    'error': f"Anonymeter evaluation failed: {str(e)}",
+                    'risk_level': 'unknown'
+                }
         
         self.logger.info("Privacy evaluation completed")
         return results
@@ -416,6 +609,27 @@ class PrivacyEvaluator:
         pii_columns = self._identify_pii_columns()
         if pii_columns:
             results['pii_analysis'] = self._analyze_pii_columns(pii_columns)
+        
+        # Evaluate structured privacy metrics (IMS, DCR, NNDR)
+        self.logger.info("Starting structured privacy metrics evaluation...")
+        try:
+            # Let evaluate_structured_privacy_metrics use its default logic
+            # which will exclude PII columns for both feature_cols and key_cols
+            structured_metrics = self.evaluate_structured_privacy_metrics()
+            results['structured_privacy_metrics'] = structured_metrics
+            self.logger.info("Structured privacy metrics evaluation completed")
+        except Exception as e:
+            self.logger.error(f"Structured privacy metrics evaluation failed: {str(e)}")
+            results['structured_privacy_metrics'] = {
+                'error': f"Structured privacy metrics evaluation failed: {str(e)}",
+                'risk_level': 'unknown'
+            }
+        except Exception as e:
+            self.logger.error(f"Structured privacy metrics evaluation failed: {str(e)}")
+            results['structured_privacy_metrics'] = {
+                'error': f"Structured privacy metrics evaluation failed: {str(e)}",
+                'risk_level': 'unknown'
+            }
             
         # Evaluate re-identification risks using Anonymeter
         self.logger.info("Starting Anonymeter re-identification risk evaluation...")
@@ -924,8 +1138,12 @@ class PrivacyEvaluator:
                             valid_entities.append((entity.text, label))
                     
                     # Get number of tokens (excluding punctuation and whitespace)
-                    doc = self.nlp(sentence.text)
-                    num_tokens = len([token for token in doc if not token.is_punct and not token.is_space])
+                    if self.nlp is not None:
+                        doc = self.nlp(sentence.text)
+                        num_tokens = len([token for token in doc if not token.is_punct and not token.is_space])
+                    else:
+                        # Fallback: simple tokenization
+                        num_tokens = len([word for word in sentence.text.split() if word.strip()])
                     
                     results.append((valid_entities, len(valid_entities), num_tokens))
                 
@@ -957,10 +1175,21 @@ class PrivacyEvaluator:
         with tqdm(total=len(texts), desc="Processing nominals", unit="text") as pbar:
             for i in range(0, len(texts), batch_size):
                 batch_texts = texts[i:i + batch_size]
-                docs = list(self.nlp.pipe(batch_texts))
+                
+                if self.nlp is not None:
+                    docs = list(self.nlp.pipe(batch_texts))
+                else:
+                    # Fallback: simple processing without spaCy
+                    docs = [None] * len(batch_texts)
                 
                 for doc in docs:
                     valid_nominals = set()
+                    
+                    if doc is None:
+                        # Fallback processing without spaCy
+                        num_tokens = len([word for word in batch_texts[0].split() if word.strip()])
+                        results.append((valid_nominals, len(valid_nominals), num_tokens))
+                        continue
                     
                     # Process each token
                     for token in doc:
@@ -1011,7 +1240,10 @@ class PrivacyEvaluator:
                         if is_nominal:
                             valid_nominals.add(token.text)
                     
-                    num_tokens = len([t for t in doc if not t.is_punct and not t.is_space])
+                    if doc is not None:
+                        num_tokens = len([t for t in doc if not t.is_punct and not t.is_space])
+                    else:
+                        num_tokens = len([word for word in batch_texts[0].split() if word.strip()])
                     results.append((valid_nominals, len(valid_nominals), num_tokens))
                 
                 pbar.update(len(batch_texts))
@@ -1302,3 +1534,80 @@ class PrivacyEvaluator:
                 embeddings.append(np.zeros(model.vector_size))
                 
         return np.array(embeddings)
+
+    def evaluate_structured_privacy_metrics(self, feature_cols=None, key_cols=None):
+        """
+        评估结构化数据的隐私指标，包括IMS、DCR、NNDR。
+        feature_cols: 用于距离计算的特征列
+        key_cols: 用于完全匹配的主键列
+        返回：dict，包含每个指标的详细分数和判定
+        """
+        self.logger.info(f"Evaluating structured privacy metrics with feature_cols: {feature_cols}, key_cols: {key_cols}")
+        
+        # Get all non-text columns (excluding all text columns)
+        all_tabular_cols = [col for col, info in self.metadata['columns'].items() 
+                           if info['sdtype'] in ['numerical', 'categorical', 'boolean', 'datetime'] 
+                           and info['sdtype'] != 'text'  # Exclude all text columns
+                           and col in self.synthetic_data.columns and col in self.original_data.columns]
+        
+        # For IMS, we should exclude PII columns to avoid exact matches
+        non_pii_tabular_cols = [col for col in all_tabular_cols 
+                               if not self.metadata['columns'][col].get('pii', False)]
+        
+        self.logger.info(f"all_tabular_cols: {all_tabular_cols}")
+        self.logger.info(f"non_pii_tabular_cols: {non_pii_tabular_cols}")
+        
+        # Validate that columns exist in both datasets
+        if feature_cols:
+            feature_cols = [col for col in feature_cols 
+                           if col in self.synthetic_data.columns and col in self.original_data.columns]
+        else:
+            # Use non-PII tabular columns for feature analysis (same as IMS)
+            feature_cols = non_pii_tabular_cols if non_pii_tabular_cols else all_tabular_cols
+        
+        if key_cols:
+            key_cols = [col for col in key_cols 
+                       if col in self.synthetic_data.columns and col in self.original_data.columns]
+        else:
+            # Use non-PII tabular columns for IMS calculation (avoid exact matches from PII)
+            key_cols = non_pii_tabular_cols if non_pii_tabular_cols else all_tabular_cols
+        
+        self.logger.info(f"Final feature_cols: {feature_cols}")
+        self.logger.info(f"Final key_cols: {key_cols}")
+        
+        # Debug: Show sample rows for IMS calculation
+        if key_cols:
+            self.logger.info(f"Sample synthetic row for IMS: {self.synthetic_data[key_cols].iloc[0].to_dict()}")
+            self.logger.info(f"Sample original row for IMS: {self.original_data[key_cols].iloc[0].to_dict()}")
+        
+        # Ensure we have at least some columns to work with
+        if not feature_cols:
+            self.logger.warning("No feature columns available for structured privacy metrics")
+            return {
+                'IMS': {'error': 'No feature columns available'},
+                'DCR': {'error': 'No feature columns available'},
+                'NNDR': {'error': 'No feature columns available'}
+            }
+        
+        try:
+            ims = identical_match_share(self.synthetic_data, self.original_data, key_cols=key_cols)
+            self.logger.info(f"IMS evaluation completed: {ims}")
+        except Exception as e:
+            self.logger.error(f"IMS evaluation failed: {str(e)}")
+            ims = {'error': f'IMS evaluation failed: {str(e)}'}
+        
+        try:
+            dcr = distance_to_closest_records(self.synthetic_data, self.original_data, feature_cols=feature_cols)
+            self.logger.info(f"DCR evaluation completed: {dcr}")
+        except Exception as e:
+            self.logger.error(f"DCR evaluation failed: {str(e)}")
+            dcr = {'error': f'DCR evaluation failed: {str(e)}'}
+        
+        try:
+            nndr = nearest_neighbor_distance_ratio(self.synthetic_data, self.original_data, feature_cols=feature_cols)
+            self.logger.info(f"NNDR evaluation completed: {nndr}")
+        except Exception as e:
+            self.logger.error(f"NNDR evaluation failed: {str(e)}")
+            nndr = {'error': f'NNDR evaluation failed: {str(e)}'}
+        
+        return {'IMS': ims, 'DCR': dcr, 'NNDR': nndr}

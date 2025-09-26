@@ -23,16 +23,23 @@ conda create -n syneval python=3.10
 conda activate syneval
 ```
 
-3. Prepare environment (one command):
+3. Install dependencies:
+
 ```bash
-python prepare_environment.py
+pip install -r requirements.txt
 ```
 
-This script will automatically:
-- Install all required Python packages from requirements.txt (with dependency conflict resolution)
-- Download required NLTK data packages (including punkt_tab)
-- Create necessary directories (plots/)
-- Test the installation
+4. Download NLTK data (required for text processing):
+
+```bash
+python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('maxent_ne_chunker'); nltk.download('words'); nltk.download('stopwords')"
+```
+
+5. Create plots directory:
+
+```bash
+mkdir -p plots
+```
 
 **Note**: You may see dependency conflict warnings during installation. This is normal in environments like Google Colab or when other packages are already installed. These conflicts won't affect SynEval functionality.
 
@@ -40,7 +47,9 @@ This script will automatically:
 ```bash
 conda create -n syneval python=3.10
 conda activate syneval
-python prepare_environment.py
+pip install -r requirements.txt
+python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('maxent_ne_chunker'); nltk.download('words'); nltk.download('stopwords')"
+mkdir -p plots
 ```
 
 ## Quick Start

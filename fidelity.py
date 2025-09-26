@@ -135,7 +135,8 @@ class FidelityEvaluator:
     def __init__(self, 
                  synthetic_data: pd.DataFrame,
                  original_data: pd.DataFrame,
-                 metadata: Dict):
+                 metadata: Dict,
+                 selected_metrics: List[str] = None):
         """
         Initialize the fidelity evaluator.
         
@@ -149,6 +150,14 @@ class FidelityEvaluator:
         self.metadata = metadata
         self.text_columns = self._get_text_columns()
         self.logger = logging.getLogger(__name__)
+        
+        # Available metrics for selection
+        self.available_metrics = [
+            'diagnostic', 'quality', 'text', 'numerical_statistics'
+        ]
+        
+        # Use all metrics if none specified
+        self.selected_metrics = selected_metrics if selected_metrics else self.available_metrics
         
         # Initialize smart cache
         self.cache = SmartCache('./cache')
@@ -220,7 +229,7 @@ class FidelityEvaluator:
             sdv_metadata = None
 
         # Diagnostic
-        if sdv_metadata:
+        if 'diagnostic' in self.selected_metrics and sdv_metadata:
             try:
                 logger.info("Running SDV diagnostic evaluation...")
                 diagnostic_report = run_diagnostic(
@@ -247,8 +256,11 @@ class FidelityEvaluator:
                         'score': round(diagnostic_report.get_score(), 4) if 'diagnostic_report' in locals() else None
                     }
                 }
+        elif 'diagnostic' in self.selected_metrics:
+            results['diagnostic'] = None
 
-            # Quality
+        # Quality
+        if 'quality' in self.selected_metrics and sdv_metadata:
             try:
                 logger.info("Running SDV quality evaluation...")
                 quality_report = evaluate_quality(
@@ -275,16 +287,16 @@ class FidelityEvaluator:
                         'score': round(quality_report.get_score(), 4) if 'quality_report' in locals() else None
                     }
                 }
-        else:
-            results['diagnostic'] = None
+        elif 'quality' in self.selected_metrics:
             results['quality'] = None
 
         # Text
-        if self.text_columns:
+        if 'text' in self.selected_metrics and self.text_columns:
             results['text'] = self._evaluate_text(self.text_columns)
 
         # Numerical statistics
-        results['numerical_statistics'] = self._evaluate_numerical_statistics()
+        if 'numerical_statistics' in self.selected_metrics:
+            results['numerical_statistics'] = self._evaluate_numerical_statistics()
 
         return results
 

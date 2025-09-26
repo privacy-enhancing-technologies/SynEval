@@ -11,15 +11,15 @@
       "sdtype": "text"
     },
     "asin": {
-      "sdtype": "text",
+      "sdtype": "categorical",
       "pii": true
     },
     "parent_asin": {
-      "sdtype": "text",
+      "sdtype": "categorical",
       "pii": true
     },
     "user_id": {
-      "sdtype": "text",
+      "sdtype": "categorical",
       "pii": true
     },
     "timestamp": {

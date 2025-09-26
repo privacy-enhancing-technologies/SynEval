@@ -4,8 +4,9 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 import nltk
-from nltk.tokenize import RegexpTokenizer, word_tokenize
+from nltk.tokenize import RegexpTokenizer
 from nltk.corpus import stopwords
+from nltk.util import ngrams
 from collections import Counter
 import math
 from gensim.models import Word2Vec
@@ -31,14 +32,25 @@ logger = logging.getLogger(__name__)
 import torch
 
 # Download required NLTK data
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords', quiet=True)
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt', quiet=True)
+# Set up local NLTK data directory
+import os
+nltk_data_dir = os.path.join(os.path.dirname(__file__), 'nltk_data')
+if not os.path.exists(nltk_data_dir):
+    os.makedirs(nltk_data_dir)
+
+# Add local directory to NLTK data path
+nltk.data.path.insert(0, nltk_data_dir)
+
+# Download required NLTK data to local directory
+def download_nltk_data_if_needed(package_name):
+    try:
+        nltk.data.find(f'tokenizers/{package_name}' if package_name in ['punkt', 'punkt_tab'] else f'corpora/{package_name}')
+    except LookupError:
+        nltk.download(package_name, download_dir=nltk_data_dir, quiet=True)
+
+download_nltk_data_if_needed('punkt')
+download_nltk_data_if_needed('stopwords')
+download_nltk_data_if_needed('punkt_tab')
 
 def get_device():
     """
@@ -160,7 +172,8 @@ class DiversityEvaluator:
                  synthetic_data: pd.DataFrame,
                  original_data: pd.DataFrame,
                  metadata: Dict,
-                 cache_dir: str = "./cache"):
+                 cache_dir: str = "./cache",
+                 selected_metrics: List[str] = None):
         """
         Initialize the diversity evaluator.
         
@@ -194,6 +207,14 @@ class DiversityEvaluator:
         else:
             self.batch_size = 1000  # Smaller batches for CPU
             logger.info("CPU processing mode")
+        
+        # Available metrics for selection
+        self.available_metrics = [
+            'tabular_diversity', 'text_diversity'
+        ]
+        
+        # Use all metrics if none specified
+        self.selected_metrics = selected_metrics if selected_metrics else self.available_metrics
         
     def _get_text_columns(self) -> List[str]:
         """Get list of text columns from metadata."""
@@ -629,7 +650,7 @@ class DiversityEvaluator:
                 try:
                     ngrams_flat = []
                     for tokens in all_token_lists:
-                        ngrams_flat.extend(nltk.ngrams(tokens, n) if n > 1 else tokens)
+                        ngrams_flat.extend(ngrams(tokens, n) if n > 1 else tokens)
                     
                     total = len(ngrams_flat)
                     if total == 0:
@@ -693,7 +714,9 @@ class DiversityEvaluator:
             stop_words = set(stopwords.words("english"))
             
             def rm_sw_tok(text: str):
-                tokens = word_tokenize(str(text).lower())
+                # Use simple regex-based tokenization to avoid punkt_tab dependency
+                import re
+                tokens = re.findall(r'\b[a-zA-Z]+\b', str(text).lower())
                 return [w for w in tokens if w not in stop_words]
             
             df = data.copy()
@@ -844,7 +867,9 @@ class DiversityEvaluator:
             stop_words = set(stopwords.words("english"))
             
             def rm_sw_tok(text: str):
-                toks = word_tokenize(str(text).lower())
+                # Use simple regex-based tokenization to avoid punkt_tab dependency
+                import re
+                toks = re.findall(r'\b[a-zA-Z]+\b', str(text).lower())
                 return [w for w in toks if w not in stop_words]
             
             df = data.copy()
@@ -979,21 +1004,23 @@ class DiversityEvaluator:
     
     def evaluate(self) -> Dict:
         """
-        Run all diversity evaluations and return comprehensive results.
+        Run selected diversity evaluations and return comprehensive results.
         
         Returns:
-            Dict: Dictionary containing all diversity metrics
+            Dict: Dictionary containing selected diversity metrics
         """
-        results = {
-            'tabular_diversity': self.evaluate_tabular_diversity()
-        }
+        results = {}
+        
+        if 'tabular_diversity' in self.selected_metrics:
+            results['tabular_diversity'] = self.evaluate_tabular_diversity()
         
         # Only evaluate text diversity if there are text columns in metadata
-        text_columns = self._get_text_columns()
-        if text_columns:
-            logger.info(f"Evaluating text diversity for columns: {text_columns}")
-            results['text_diversity'] = self.evaluate_text_diversity()
-        else:
-            logger.info("No text columns found in metadata, skipping text diversity evaluation")
+        if 'text_diversity' in self.selected_metrics:
+            text_columns = self._get_text_columns()
+            if text_columns:
+                logger.info(f"Evaluating text diversity for columns: {text_columns}")
+                results['text_diversity'] = self.evaluate_text_diversity()
+            else:
+                logger.info("No text columns found in metadata, skipping text diversity evaluation")
         
         return results

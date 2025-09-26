@@ -264,9 +264,10 @@ class FastAmazonFashionNERAnalyzer:
         
         return results
 
-    def analyze_dataset(self, csv_file: str, text_column: str = 'text', sample_size: Optional[int] = None) -> Dict:
+    def analyze_dataset(self, csv_file: str, text_column: str = 'text', top_n: Optional[int] = None) -> Dict:
         """
         Analyze named entities in the Amazon Fashion dataset - optimized version.
+        If top_n is specified, analyze all data first, then return top N records with highest entity density.
         """
         print("="*60)
         print("AMAZON FASHION NER ANALYSIS - FAST VERSION")
@@ -274,52 +275,85 @@ class FastAmazonFashionNERAnalyzer:
         
         self.logger.info(f"Loading dataset from {csv_file}...")
         
-        # Load dataset with progress
-        print("Loading dataset...")
-        if sample_size:
-            df = pd.read_csv(csv_file, nrows=sample_size)
-            self.logger.info(f"Loaded {len(df)} samples from dataset")
-        else:
-            df = pd.read_csv(csv_file)
-            self.logger.info(f"Loaded {len(df)} samples from dataset")
+        # Load ALL dataset (not limited by sample_size)
+        print("Loading ALL dataset...")
+        df = pd.read_csv(csv_file)
+        print(f"Loaded {len(df)} total samples from dataset")
+        print(f"Dataset columns: {list(df.columns)}")
+        print(f"First few text lengths: {[len(str(text)) for text in df[text_column].head()]}")
+        self.logger.info(f"Loaded {len(df)} total samples from dataset")
         
         # Check if text column exists
         if text_column not in df.columns:
             available_columns = list(df.columns)
             raise ValueError(f"Text column '{text_column}' not found. Available columns: {available_columns}")
         
-        # Clean and prepare texts
-        print("Preparing texts...")
-        texts = df[text_column].astype(str).fillna('').tolist()
+        # Clean and prepare ALL texts
+        print("Preparing ALL texts...")
+        all_texts = df[text_column].astype(str).fillna('').tolist()
         
         # Remove empty texts and very short texts
-        original_count = len(texts)
-        texts = [text for text in texts if len(text.strip()) > 10]  # Only texts with >10 chars
-        self.logger.info(f"Processing {len(texts)} non-empty texts (filtered from {original_count})")
+        original_count = len(all_texts)
+        all_texts = [text for text in all_texts if len(text.strip()) > 10]  # Only texts with >10 chars
+        self.logger.info(f"Processing {len(all_texts)} non-empty texts (filtered from {original_count})")
         
-        # Check cache first
-        cache_key = f"amazon_fashion_entities_fast_{len(texts)}"
+        # Check cache first for full dataset
+        cache_key = f"amazon_fashion_entities_full_{len(all_texts)}"
+        print(f"Cache key: {cache_key}")
+        print(f"Available cache keys: {list(self.cache.keys())}")
         if cache_key in self.cache:
-            self.logger.info("Using cached results...")
+            self.logger.info("Using cached results for full dataset...")
             print("Found cached results! Loading...")
-            return self.cache[cache_key]
+            full_results = self.cache[cache_key]
+            print(f"Cached results contain {len(full_results.get('text_analyses', []))} text analyses")
+        else:
+            print("No cached results found, will process all data...")
+            # Process ALL entities first
+            print("Starting entity processing for ALL texts...")
+            self.logger.info("Processing entities for all texts...")
+            all_results = self._process_entities_batch_optimized(all_texts)
+            
+            # Create analysis for all texts
+            print("Creating analysis for all texts...")
+            full_results = self._create_detailed_analysis(all_results, all_texts, df)
+            
+            # Save to cache
+            print("Saving full results to cache...")
+            self.cache[cache_key] = full_results
+            self._save_cache()
         
-        # Process entities
-        print("Starting entity processing...")
-        self.logger.info("Processing entities...")
-        results = self._process_entities_batch_optimized(texts)
-        
-        # Create detailed analysis
-        print("Creating analysis...")
-        analysis_results = self._create_detailed_analysis(results, texts, df)
-        
-        # Save to cache
-        print("Saving results to cache...")
-        self.cache[cache_key] = analysis_results
-        self._save_cache()
-        
-        print("Analysis completed successfully!")
-        return analysis_results
+        # If top_n is specified, filter to top N records with highest density
+        if top_n and top_n > 0:
+            print(f"Filtering to top {top_n} records with highest entity density...")
+            
+            # Sort text analyses by entity density (descending)
+            text_analyses = full_results['text_analyses']
+            sorted_analyses = sorted(text_analyses, key=lambda x: x['entity_density'], reverse=True)
+            
+            # Take top N
+            top_n_analyses = sorted_analyses[:top_n]
+            
+            # Get the corresponding texts and indices
+            top_n_indices = [analysis['text_index'] for analysis in top_n_analyses]
+            top_n_texts = [all_texts[i] for i in top_n_indices]
+            
+            # Recreate results for top N texts
+            top_n_results = []
+            for analysis in top_n_analyses:
+                entities = analysis['entities']
+                num_entities = analysis['num_entities']
+                num_tokens = analysis['num_tokens']
+                top_n_results.append((entities, num_entities, num_tokens))
+            
+            # Create analysis for top N texts
+            print(f"Creating analysis for top {top_n} texts...")
+            analysis_results = self._create_detailed_analysis(top_n_results, top_n_texts, df.iloc[top_n_indices])
+            
+            print(f"Analysis completed for top {top_n} records with highest entity density!")
+            return analysis_results
+        else:
+            print("Analysis completed for all records!")
+            return full_results
 
     def _create_detailed_analysis(self, results: List[Tuple], texts: List[str], df: pd.DataFrame) -> Dict:
         """
@@ -346,7 +380,13 @@ class FastAmazonFashionNERAnalyzer:
             text_analyses.append(text_analysis)
             
             # Collect all entities
-            all_entities.update(entities)
+            for entity in entities:
+                # Ensure entity is a tuple (text, label)
+                if isinstance(entity, (list, tuple)) and len(entity) == 2:
+                    all_entities.add(tuple(entity))
+                else:
+                    print(f"Warning: Skipping invalid entity format: {entity}")
+                    continue
         
         # Group entities by type
         entities_by_type = {}
@@ -383,9 +423,9 @@ class FastAmazonFashionNERAnalyzer:
         for entity_type, entities in entities_by_type.items():
             entity_counts[entity_type] = len(entities)
         
-        # Find texts with highest entity counts
-        text_analyses_sorted = sorted(text_analyses, key=lambda x: x['num_entities'], reverse=True)
-        top_200_high_entity_texts = text_analyses_sorted[:200]
+        # Find texts with highest entity density (consistent with selection criteria)
+        text_analyses_sorted = sorted(text_analyses, key=lambda x: x['entity_density'], reverse=True)
+        top_2000_high_entity_texts = text_analyses_sorted[:2000]
         
         return {
             'dataset_info': {
@@ -409,17 +449,23 @@ class FastAmazonFashionNERAnalyzer:
                 }
             },
             'entities_by_type': entities_by_type,
-            'top_200_high_entity_texts': top_200_high_entity_texts,
+            'top_2000_high_entity_texts': top_2000_high_entity_texts,
             'text_analyses': text_analyses
         }
 
     def _group_entities_by_type(self, entities: List[Tuple[str, str]]) -> Dict[str, List[str]]:
         """Group entities by their type for a single text."""
         grouped = {}
-        for entity, type_ in entities:
-            if type_ not in grouped:
-                grouped[type_] = []
-            grouped[type_].append(entity)
+        for entity in entities:
+            # Ensure entity is a tuple (text, label)
+            if isinstance(entity, (list, tuple)) and len(entity) == 2:
+                text, type_ = tuple(entity)
+                if type_ not in grouped:
+                    grouped[type_] = []
+                grouped[type_].append(text)
+            else:
+                print(f"Warning: Skipping invalid entity format in grouping: {entity}")
+                continue
         return grouped
 
     def generate_report(self, results: Dict, output_dir: str = './reports'):
@@ -442,9 +488,9 @@ class FastAmazonFashionNERAnalyzer:
         print("1/4 - Generating main analysis report...")
         self._generate_main_report(results, output_dir, timestamp)
         
-        # 2. Top 200 High Entity Texts Report
-        print("2/4 - Generating top 200 high entity texts report...")
-        self._generate_top_200_report(results, output_dir, timestamp)
+        # 2. Top 2000 High Entity Texts Report
+        print("2/4 - Generating top 2000 high entity texts report...")
+        self._generate_top_2000_report(results, output_dir, timestamp)
         
         # 3. Entity Density Analysis Report
         print("3/4 - Generating entity density analysis report...")
@@ -520,21 +566,28 @@ class FastAmazonFashionNERAnalyzer:
                     f.write(f"  - {entity}\n")
                 f.write("\n")
 
-    def _generate_top_200_report(self, results: Dict, output_dir: str, timestamp: str):
-        """Generate report for top 200 texts with highest entity counts."""
-        report_file = Path(output_dir) / f"top_200_high_entity_texts_fast_{timestamp}.txt"
+    def _generate_top_2000_report(self, results: Dict, output_dir: str, timestamp: str):
+        """Generate report for top 2000 texts with highest entity density."""
+        report_file = Path(output_dir) / f"top_2000_high_entity_texts_fast_{timestamp}.txt"
         
         with open(report_file, 'w', encoding='utf-8') as f:
             f.write("="*80 + "\n")
-            f.write("TOP 200 TEXTS WITH HIGHEST ENTITY COUNTS (FAST VERSION)\n")
+            f.write("TOP 2000 TEXTS WITH HIGHEST ENTITY DENSITY (FAST VERSION)\n")
             f.write("="*80 + "\n")
             f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
             
-            for i, text_analysis in enumerate(results['top_200_high_entity_texts'], 1):
-                f.write(f"{i:3d}. Entity Count: {text_analysis['num_entities']}\n")
-                f.write(f"    Entity Density: {text_analysis['entity_density']:.4f}\n")
-                f.write(f"    Complete Text: {text_analysis['full_text']}\n")
-                f.write(f"    Entities: {', '.join([f'{e[0]} ({e[1]})' for e in text_analysis['entities']])}\n")
+            for i, text_analysis in enumerate(results['top_2000_high_entity_texts'], 1):
+                f.write(f"{i:4d}. Entity Count: {text_analysis['num_entities']}\n")
+                f.write(f"     Entity Density: {text_analysis['entity_density']:.4f}\n")
+                f.write(f"     Complete Text: {text_analysis['full_text']}\n")
+                # Format entities safely
+                entity_strings = []
+                for e in text_analysis['entities']:
+                    if isinstance(e, (list, tuple)) and len(e) == 2:
+                        entity_strings.append(f'{e[0]} ({e[1]})')
+                    else:
+                        entity_strings.append(f'Invalid: {e}')
+                f.write(f"     Entities: {', '.join(entity_strings)}\n")
                 f.write("-" * 80 + "\n\n")
 
     def _generate_density_report(self, results: Dict, output_dir: str, timestamp: str):
@@ -626,7 +679,7 @@ def main():
         # Configuration
         csv_file = 'real_10k.csv'
         text_column = 'text'
-        sample_size = 10000  # Start with 10K for testing
+        top_n = 2000  # Analyze top 2000 records with highest entity density
         
         # Initialize analyzer
         logger.info("Initializing Fast Amazon Fashion NER Analyzer...")
@@ -634,7 +687,7 @@ def main():
         
         # Analyze dataset
         logger.info("Starting analysis...")
-        results = analyzer.analyze_dataset(csv_file, text_column, sample_size)
+        results = analyzer.analyze_dataset(csv_file, text_column, top_n)
         
         # Generate reports
         logger.info("Generating reports...")

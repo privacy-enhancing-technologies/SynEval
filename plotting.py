@@ -10,7 +10,7 @@ from pathlib import Path
 import logging
 
 # Set style for better-looking plots
-plt.style.use('seaborn-v0_8')
+plt.style.use('seaborn')
 sns.set_palette("husl")
 
 logger = logging.getLogger(__name__)
