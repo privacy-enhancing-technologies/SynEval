@@ -339,7 +339,7 @@ def ensure_tensor_device(tensor, device):
     return tensor
 
 class PrivacyEvaluator:
-    def __init__(self, synthetic_data: pd.DataFrame, original_data: pd.DataFrame, metadata: Dict, selected_metrics: List[str] = None):
+    def __init__(self, synthetic_data: pd.DataFrame, original_data: pd.DataFrame, metadata: Dict, selected_metrics: List[str] = None, device: str = 'auto'):
         """
         Initialize the privacy evaluator.
         
@@ -347,6 +347,8 @@ class PrivacyEvaluator:
             synthetic_data: DataFrame containing synthetic data
             original_data: DataFrame containing original data
             metadata: Dictionary containing metadata about the data
+            selected_metrics: List of specific metrics to run
+            device: Device to use for computation ('auto', 'cpu', 'cuda')
         """
         self.synthetic_data = synthetic_data
         self.original_data = original_data
@@ -368,11 +370,22 @@ class PrivacyEvaluator:
         # Use all metrics if none specified
         self.selected_metrics = selected_metrics if selected_metrics else self.available_metrics
         
-        # Detect best available device
-        if torch.cuda.is_available():
-            self.device = torch.device('cuda')
-            self.logger.info("Using CUDA for acceleration")
-        else:
+        # Device management
+        if device == 'auto':
+            if torch.cuda.is_available():
+                self.device = torch.device('cuda')
+                self.logger.info("Using CUDA for acceleration")
+            else:
+                self.device = torch.device('cpu')
+                self.logger.info("Using CPU")
+        elif device == 'cuda':
+            if torch.cuda.is_available():
+                self.device = torch.device('cuda')
+                self.logger.info("Using CUDA for acceleration")
+            else:
+                self.logger.warning("CUDA requested but not available. Falling back to CPU.")
+                self.device = torch.device('cpu')
+        else:  # cpu
             self.device = torch.device('cpu')
             self.logger.info("Using CPU")
         

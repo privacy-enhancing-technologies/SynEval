@@ -189,7 +189,8 @@ class UtilityEvaluator:
                  input_columns: List[str],
                  output_columns: List[str],
                  task_type: str = 'auto',
-                 selected_metrics: List[str] = None):
+                 selected_metrics: List[str] = None,
+                 device: str = 'auto'):
         """
         Initialize the utility evaluator.
         
@@ -200,6 +201,8 @@ class UtilityEvaluator:
             input_columns: List of columns to use as features
             output_columns: List of columns to predict
             task_type: Type of task ('classification', 'regression', or 'auto')
+            selected_metrics: List of specific metrics to run
+            device: Device to use for computation ('auto', 'cpu', 'cuda')
         """
         self.synthetic_data = synthetic_data
         self.original_data = original_data
@@ -215,14 +218,22 @@ class UtilityEvaluator:
         self.original_fingerprint = compute_dataset_fingerprint(original_data, metadata)
         self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
         
-        # Setup GPU acceleration only when evaluator is created
-        global DEVICE
-        if DEVICE is None:
-            DEVICE = setup_gpu_acceleration()
-            if DEVICE == 'cuda':
-                logger.info("GPU acceleration available - using CUDA")
+        # Device management
+        if device == 'auto':
+            self.device = setup_gpu_acceleration()
+        elif device == 'cuda':
+            if torch.cuda.is_available():
+                self.device = 'cuda'
             else:
-                logger.info("GPU not available - using CPU")
+                logger.warning("CUDA requested but not available. Falling back to CPU.")
+                self.device = 'cpu'
+        else:  # cpu
+            self.device = 'cpu'
+        
+        if self.device == 'cuda':
+            logger.info("GPU acceleration available - using CUDA")
+        else:
+            logger.info("GPU not available - using CPU")
         
         # Available metrics for selection
         self.available_metrics = [
@@ -285,7 +296,7 @@ class UtilityEvaluator:
     
     def _get_model(self):
         """Get appropriate model based on task type with GPU acceleration support."""
-        if DEVICE == 'cuda':
+        if self.device == 'cuda':
             # Use GPU-accelerated models when available
             try:
                 import xgboost as xgb
@@ -395,7 +406,7 @@ class UtilityEvaluator:
                     X_test = vectorizer.transform(X_test[text_columns[0]].fillna(''))
                     
                     # Convert to GPU tensors if available for faster computation
-                    if DEVICE == 'cuda':
+                    if self.device == 'cuda':
                         import torch
                         X_train_real = torch.tensor(X_train_real.toarray(), device='cuda', dtype=torch.float32)
                         X_train_syn = torch.tensor(X_train_syn.toarray(), device='cuda', dtype=torch.float32)
@@ -415,7 +426,7 @@ class UtilityEvaluator:
                     X_test_other = test_data[other_columns].fillna(0).values
                     
                     # Convert to GPU tensors if available
-                    if DEVICE == 'cuda':
+                    if self.device == 'cuda':
                         import torch
                         X_train_real_other = torch.tensor(X_train_real_other, device='cuda', dtype=torch.float32)
                         X_train_syn_other = torch.tensor(X_train_syn_other, device='cuda', dtype=torch.float32)
@@ -423,7 +434,7 @@ class UtilityEvaluator:
                     
                     # Combine with text features if they exist
                     if text_columns:
-                        if DEVICE == 'cuda':
+                        if self.device == 'cuda':
                             X_train_real = torch.cat([X_train_real, X_train_real_other], dim=1)
                             X_train_syn = torch.cat([X_train_syn, X_train_syn_other], dim=1)
                             X_test = torch.cat([X_test, X_test_other], dim=1)

@@ -173,7 +173,8 @@ class DiversityEvaluator:
                  original_data: pd.DataFrame,
                  metadata: Dict,
                  cache_dir: str = "./cache",
-                 selected_metrics: List[str] = None):
+                 selected_metrics: List[str] = None,
+                 device: str = 'auto'):
         """
         Initialize the diversity evaluator.
         
@@ -182,6 +183,8 @@ class DiversityEvaluator:
             original_data: Original dataset
             metadata: Dictionary containing column types and other metadata
             cache_dir: Directory to store cached results
+            selected_metrics: List of specific metrics to run
+            device: Device to use for computation ('auto', 'cpu', 'cuda')
         """
         self.synthetic_data = synthetic_data
         self.original_data = original_data
@@ -197,7 +200,17 @@ class DiversityEvaluator:
         self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
         
         # Device management
-        self.device = get_device()
+        if device == 'auto':
+            self.device = get_device()
+        elif device == 'cuda':
+            if torch.cuda.is_available():
+                self.device = torch.device('cuda')
+            else:
+                logger.warning("CUDA requested but not available. Falling back to CPU.")
+                self.device = torch.device('cpu')
+        else:  # cpu
+            self.device = torch.device('cpu')
+        
         logger.info(f"Using device: {self.device}")
         
         # GPU acceleration settings

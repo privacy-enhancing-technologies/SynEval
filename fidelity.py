@@ -31,7 +31,7 @@ def setup_gpu_acceleration():
         return 'cpu'
 
 # Initialize device as None - will be set when evaluator is created
-DEVICE = None
+# DEVICE = None  # Now managed by device_manager
 
 def compute_dataset_fingerprint(data: pd.DataFrame, metadata: Dict) -> str:
     """
@@ -136,7 +136,8 @@ class FidelityEvaluator:
                  synthetic_data: pd.DataFrame,
                  original_data: pd.DataFrame,
                  metadata: Dict,
-                 selected_metrics: List[str] = None):
+                 selected_metrics: List[str] = None,
+                 device: str = 'auto'):
         """
         Initialize the fidelity evaluator.
         
@@ -144,6 +145,8 @@ class FidelityEvaluator:
             synthetic_data: DataFrame containing synthetic data
             original_data: DataFrame containing original data
             metadata: Dictionary containing metadata about the data
+            selected_metrics: List of specific metrics to run
+            device: Device to use for computation ('auto', 'cpu', 'cuda')
         """
         self.synthetic_data = synthetic_data
         self.original_data = original_data
@@ -166,14 +169,22 @@ class FidelityEvaluator:
         self.original_fingerprint = compute_dataset_fingerprint(original_data, metadata)
         self.synthetic_fingerprint = compute_dataset_fingerprint(synthetic_data, metadata)
         
-        # Setup GPU acceleration only when evaluator is created
-        global DEVICE
-        if DEVICE is None:
-            DEVICE = setup_gpu_acceleration()
-            if DEVICE == 'cuda':
-                self.logger.info("GPU acceleration available - using CUDA")
+        # Device management
+        if device == 'auto':
+            self.device = setup_gpu_acceleration()
+        elif device == 'cuda':
+            if torch.cuda.is_available():
+                self.device = 'cuda'
             else:
-                self.logger.info("GPU not available - using CPU")
+                self.logger.warning("CUDA requested but not available. Falling back to CPU.")
+                self.device = 'cpu'
+        else:  # cpu
+            self.device = 'cpu'
+        
+        if self.device == 'cuda':
+            self.logger.info("GPU acceleration available - using CUDA")
+        else:
+            self.logger.info("GPU not available - using CPU")
         
     def _get_text_columns(self) -> List[str]:
         """Get list of text columns from metadata."""
@@ -342,7 +353,7 @@ class FidelityEvaluator:
                 synthetic_tfidf = vectorizer.transform(self.synthetic_data[col].fillna(''))
                 
                 # Convert to GPU tensors if available for faster computation
-                if DEVICE == 'cuda':
+                if self.device == 'cuda':
                     import torch
                     original_scores = torch.tensor(original_tfidf.mean(axis=0).A1, device='cuda')
                     synthetic_scores = torch.tensor(synthetic_tfidf.mean(axis=0).A1, device='cuda')
@@ -484,7 +495,7 @@ class FidelityEvaluator:
                 # Calculate distribution similarity using histogram comparison with GPU acceleration
                 bins = min(50, len(orig_data.unique()), len(syn_data.unique()))
                 if bins > 1:
-                    if DEVICE == 'cuda':
+                    if self.device == 'cuda':
                         import torch
                         # Convert to GPU tensors for faster computation
                         orig_tensor = torch.tensor(orig_data.values, device='cuda', dtype=torch.float32)

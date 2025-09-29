@@ -11,13 +11,49 @@ from utility import UtilityEvaluator
 from diversity import DiversityEvaluator
 from privacy import PrivacyEvaluator
 import logging
+import torch
+
+
+def configure_device(device_preference: str, force_cpu: bool = False, gpu_memory_fraction: float = 0.8) -> str:
+    """
+    Configure the device for computation based on user preferences and system capabilities.
+    
+    Args:
+        device_preference: User's device preference ('auto', 'cpu', 'cuda')
+        force_cpu: Whether to force CPU usage even if GPU is available
+        gpu_memory_fraction: Fraction of GPU memory to use (0.0-1.0)
+    
+    Returns:
+        str: The configured device ('cpu' or 'cuda')
+    """
+    if force_cpu:
+        return 'cpu'
+    
+    if device_preference == 'cpu':
+        return 'cpu'
+    elif device_preference == 'cuda':
+        if torch.cuda.is_available():
+            # Set GPU memory fraction
+            torch.cuda.set_per_process_memory_fraction(gpu_memory_fraction)
+            return 'cuda'
+        else:
+            print("Warning: CUDA requested but not available. Falling back to CPU.")
+            return 'cpu'
+    else:  # auto
+        if torch.cuda.is_available():
+            # Set GPU memory fraction
+            torch.cuda.set_per_process_memory_fraction(gpu_memory_fraction)
+            return 'cuda'
+        else:
+            return 'cpu'
 
 
 class SynEval:
-    def __init__(self, synthetic_data: pd.DataFrame, original_data: pd.DataFrame, metadata: Dict):
+    def __init__(self, synthetic_data: pd.DataFrame, original_data: pd.DataFrame, metadata: Dict, device: str = 'auto'):
         self.synthetic_data = synthetic_data
         self.original_data = original_data
         self.metadata = metadata
+        self.device = device
         self.logger = logging.getLogger(__name__)
         
         # Initialize evaluators as None - will be created when needed
@@ -28,7 +64,7 @@ class SynEval:
 
     def evaluate_fidelity(self, selected_metrics: List[str] = None) -> Dict:
         if self._fidelity_evaluator is None:
-            self._fidelity_evaluator = FidelityEvaluator(self.synthetic_data, self.original_data, self.metadata, selected_metrics)
+            self._fidelity_evaluator = FidelityEvaluator(self.synthetic_data, self.original_data, self.metadata, selected_metrics, self.device)
         else:
             # Update selected metrics if evaluator already exists
             self._fidelity_evaluator.selected_metrics = selected_metrics if selected_metrics else self._fidelity_evaluator.available_metrics
@@ -42,13 +78,14 @@ class SynEval:
             self.metadata,
             input_columns=input_columns,
             output_columns=output_columns,
-            selected_metrics=selected_metrics
+            selected_metrics=selected_metrics,
+            device=self.device
         )
         return utility_evaluator.evaluate()
 
     def evaluate_diversity(self, selected_metrics: List[str] = None) -> Dict:
         if self._diversity_evaluator is None:
-            self._diversity_evaluator = DiversityEvaluator(self.synthetic_data, self.original_data, self.metadata, selected_metrics=selected_metrics)
+            self._diversity_evaluator = DiversityEvaluator(self.synthetic_data, self.original_data, self.metadata, selected_metrics=selected_metrics, device=self.device)
         else:
             # Update selected metrics if evaluator already exists
             self._diversity_evaluator.selected_metrics = selected_metrics if selected_metrics else self._diversity_evaluator.available_metrics
@@ -56,7 +93,7 @@ class SynEval:
 
     def evaluate_privacy(self, selected_metrics: List[str] = None) -> Dict:
         if self._privacy_evaluator is None:
-            self._privacy_evaluator = PrivacyEvaluator(self.synthetic_data, self.original_data, self.metadata, selected_metrics)
+            self._privacy_evaluator = PrivacyEvaluator(self.synthetic_data, self.original_data, self.metadata, selected_metrics, self.device)
         else:
             # Update selected metrics if evaluator already exists
             self._privacy_evaluator.selected_metrics = selected_metrics if selected_metrics else self._privacy_evaluator.available_metrics
@@ -64,7 +101,7 @@ class SynEval:
 
     def evaluate_correlation(self, correlation_types, **kwargs):
         if self._utility_evaluator is None:
-            self._utility_evaluator = UtilityEvaluator(self.synthetic_data, self.original_data, self.metadata, input_columns=[], output_columns=[])
+            self._utility_evaluator = UtilityEvaluator(self.synthetic_data, self.original_data, self.metadata, input_columns=[], output_columns=[], device=self.device)
         return self._utility_evaluator.evaluate_correlation(correlation_types, **kwargs)
 
 def parse_args():
@@ -120,6 +157,14 @@ def parse_args():
     parser.add_argument('--log-level', default='INFO', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help='Set the logging level')
     parser.add_argument('--plot', action='store_true', help='Generate plots for all evaluation metrics and save them to the ./plots directory')
     
+    # Device selection arguments
+    parser.add_argument('--device', choices=['auto', 'cpu', 'cuda'], default='auto',
+                        help='Device to use for computation (default: auto - automatically detect best available device)')
+    parser.add_argument('--force-cpu', action='store_true',
+                        help='Force CPU usage even if GPU is available (overrides --device)')
+    parser.add_argument('--gpu-memory-fraction', type=float, default=0.8,
+                        help='Fraction of GPU memory to use (0.0-1.0, default: 0.8)')
+    
     return parser
 
 def main():
@@ -160,8 +205,12 @@ def main():
         if not args.utility_input or not args.utility_output:
             parser.error("Utility evaluation requires both --utility-input and --utility-output arguments.")
 
+    # Configure device
+    device = configure_device(args.device, args.force_cpu, args.gpu_memory_fraction)
+    logger.info(f"Configured device: {device}")
+    
     # Run evaluation
-    evaluator = SynEval(synthetic_data, original_data, metadata)
+    evaluator = SynEval(synthetic_data, original_data, metadata, device)
     results = {}
 
     if 'fidelity' in dimensions:

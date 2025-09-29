@@ -89,7 +89,37 @@ python run.py \
     --utility-input text \
     --utility-output rating \
     --output results.json \
-    --plot
+    --plot \
+    --device auto
+```
+
+**For GPU acceleration (if available):**
+```bash
+python run.py \
+    --synthetic synthetic_data.csv \
+    --original original_data.csv \
+    --metadata metadata.json \
+    --dimensions fidelity utility diversity privacy \
+    --utility-input text \
+    --utility-output rating \
+    --output results.json \
+    --plot \
+    --device cuda \
+    --gpu-memory-fraction 0.8
+```
+
+**For CPU-only processing:**
+```bash
+python run.py \
+    --synthetic synthetic_data.csv \
+    --original original_data.csv \
+    --metadata metadata.json \
+    --dimensions fidelity utility diversity privacy \
+    --utility-input text \
+    --utility-output rating \
+    --output results.json \
+    --plot \
+    --device cpu
 ```
 
 
@@ -98,6 +128,27 @@ python run.py \
 - Python 3.10+
 - pandas
 - Additional dependencies will be installed automatically
+
+### GPU Requirements (Optional)
+
+SynEval supports GPU acceleration for faster computation of certain metrics (diversity, privacy, and some fidelity metrics). GPU acceleration is **optional** and the framework will automatically fall back to CPU if:
+
+- No GPU is available
+- CUDA drivers are not installed
+- PyTorch was not installed with CUDA support
+
+**For GPU acceleration, you need:**
+- NVIDIA GPU with CUDA support
+- CUDA drivers installed
+- PyTorch with CUDA support (install with `pip install torch --index-url https://download.pytorch.org/whl/cu118`)
+
+**Note:** GPU acceleration primarily benefits:
+- Text diversity analysis (Word2Vec, semantic analysis)
+- Privacy evaluation (Flair NER models)
+- Large dataset processing
+- Complex statistical computations
+
+For small datasets or CPU-only environments, the framework will run efficiently on CPU.
 
 ## Usage
 ### Running Evaluations
@@ -143,6 +194,30 @@ You can select one or more evaluation dimensions to run:
 
 - `--output`: Path to save evaluation results in JSON format. If not specified, results will be printed to stdout.
 - `--plot`: Generate plots for all evaluation metrics and save them to the `./plots` directory. Plots will visualize key metrics from fidelity, utility, diversity, and privacy evaluations.
+
+#### Device Selection Arguments
+
+- `--device`: Device to use for computation (`auto`, `cpu`, `cuda`). Default: `auto` (automatically detect best available device)
+- `--force-cpu`: Force CPU usage even if GPU is available (overrides `--device`)
+- `--gpu-memory-fraction`: Fraction of GPU memory to use (0.0-1.0, default: 0.8)
+
+**Device Selection Examples:**
+```bash
+# Use automatic device detection (default)
+python run.py --synthetic data.csv --original real.csv --metadata meta.json
+
+# Force CPU usage
+python run.py --synthetic data.csv --original real.csv --metadata meta.json --device cpu
+
+# Force GPU usage (if available)
+python run.py --synthetic data.csv --original real.csv --metadata meta.json --device cuda
+
+# Force CPU even if GPU is available
+python run.py --synthetic data.csv --original real.csv --metadata meta.json --force-cpu
+
+# Use GPU with custom memory allocation
+python run.py --synthetic data.csv --original real.csv --metadata meta.json --device cuda --gpu-memory-fraction 0.6
+```
 
 #### General Example
 
@@ -520,7 +595,14 @@ Diversity assesses the variety and uniqueness of the generated data across multi
 
 ### Privacy Evaluation (`privacy.py`)
 
-Privacy analysis evaluates the protection level of sensitive information in synthetic data.
+**About Risk Thresholds (Important)**  
+SynEval includes some **default thresholds** as convenient alert levels, but acceptable risk varies across **domains, attack setups, and compliance standards**.  
+Thresholds are therefore **configurable**, and reports also include **baseline comparisons** and optional **uncertainty estimates** to support interpretation.
+
+- **Membership Inference (MIA):** Default alert at **AUC ≥ 0.70** (configurable). Motivation: if an attack under our default feature/attacker setting performs clearly better than random (AUC=0.50), users should review protection. However, AUC depends heavily on attacker strength, class imbalance, and evaluation protocol, so **0.70 is not a universal cut-off**. Always check ROC curves, Precision@k, permutation/random baselines, and confidence intervals. See recent MIA studies for context [[arXiv][1]].
+
+- **Exact Match (row-level duplicates):** Default alert at **>5%** (configurable). This is a **conservative heuristic**: in most non-templated domains, high identical duplication may indicate memorization. But some datasets (short reviews, limited vocab) naturally duplicate. Always compare with **original duplication rate**, **approximate matching**, and **Anonymeter risks (singling-out, linkability, inference)** before labeling it leakage [[arXiv][2]].
+
 
 #### Exact Match Analysis
 **Data Type**: Both structured and text data
@@ -528,7 +610,7 @@ Privacy analysis evaluates the protection level of sensitive information in synt
 - **Exact Match Percentage**: Percentage of synthetic rows that exactly match original rows
   - **Algorithm**: Row-by-row comparison using pandas equality operations
   - **Score Calculation**: (Matching rows) / (Total synthetic rows) × 100
-  - **Risk Level**: High if >5% exact matches, Low otherwise
+  - **Interpretation with context**: Report also includes **original duplication rate** and **approximate matching** (edit distance, token Jaccard). This helps distinguish benign repetition from real leakage. Default alert threshold is 5% (configurable). See [arXiv][2].
 
 #### Membership Inference Attack
 **Data Type**: Both structured and text data
@@ -690,6 +772,14 @@ The evaluation results are returned in JSON format. Each evaluation dimension wi
 }
 ```
 
+### References & Further Reading
+[1]: https://arxiv.org/abs/2302.12580 "[2302.12580] Membership Inference Attacks against Synthetic Data"
+[2]: https://arxiv.org/abs/2211.10459 "A Unified Framework for Quantifying Privacy Risk in Synthetic Data"
+[3]: https://docs.sdv.dev/sdmetrics/data-metrics/diagnostic/diagnostic-report "Diagnostic Report | SDMetrics"
+[4]: https://arxiv.org/abs/2404.14445 "A Multi-Faceted Evaluation Framework for Assessing Synthetic Data"
+
+
+
 ## Data Requirements
 
 1. Both synthetic and original data files must be in CSV format
@@ -703,6 +793,33 @@ The framework performs several validation checks:
 1. Ensures all required files exist
 2. Validates that at least one evaluation type is selected
 3. Verifies that the metadata structure matches the data files
+
+## Troubleshooting
+
+### Device-Related Issues
+
+**CUDA Out of Memory Error:**
+```bash
+# Reduce GPU memory usage
+python run.py --device cuda --gpu-memory-fraction 0.5
+
+# Or force CPU usage
+python run.py --force-cpu
+```
+
+**CUDA Not Available Warning:**
+- Install CUDA-enabled PyTorch: `pip install torch --index-url https://download.pytorch.org/whl/cu118`
+- Verify CUDA installation: `python -c "import torch; print(torch.cuda.is_available())"`
+- Use CPU mode: `python run.py --device cpu`
+
+**Slow Performance:**
+- For large datasets, ensure GPU is being used: `python run.py --device cuda`
+- Check GPU memory usage and adjust `--gpu-memory-fraction` if needed
+- Consider using CPU for small datasets: `python run.py --device cpu`
+
+**Device Detection Issues:**
+- Force specific device: `python run.py --device cpu` or `python run.py --device cuda`
+- Check system GPU availability: `nvidia-smi` (Linux/Windows) or `system_profiler SPDisplaysDataType` (macOS)
 
 ## Additional Tools
 
