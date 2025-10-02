@@ -44,6 +44,7 @@ mkdir -p plots
 **Note**: You may see dependency conflict warnings during installation. This is normal in environments like Google Colab or when other packages are already installed. These conflicts won't affect SynEval functionality.
 
 **For a clean installation without conflicts**, consider using a virtual environment:
+
 ```bash
 conda create -n syneval python=3.10
 conda activate syneval
@@ -58,15 +59,18 @@ mkdir -p plots
 
 The easiest way to get started with SynEval is to run the demo notebook on Google Colab:
 
-1. **Open the Demo Notebook**: 
+1. **Open the Demo Notebook**:
+
    - Navigate to `SynEval_Demo.ipynb` in the repository
    - Click "Open in Colab" or upload the notebook to Google Colab
 
 2. **Install Dependencies**:
+
    - The notebook includes a setup cell that automatically installs all required dependencies
    - Run the setup cell to prepare the environment
 
 3. **Run the Demo**:
+
    - The notebook provides step-by-step examples of running SynEval evaluations
    - Includes sample data and metadata for testing
    - Demonstrates all four evaluation dimensions (fidelity, utility, diversity, privacy)
@@ -94,6 +98,7 @@ python run.py \
 ```
 
 **For GPU acceleration (if available):**
+
 ```bash
 python run.py \
     --synthetic synthetic_data.csv \
@@ -109,6 +114,7 @@ python run.py \
 ```
 
 **For CPU-only processing:**
+
 ```bash
 python run.py \
     --synthetic synthetic_data.csv \
@@ -121,7 +127,6 @@ python run.py \
     --plot \
     --device cpu
 ```
-
 
 ## Requirements
 
@@ -138,11 +143,13 @@ SynEval supports GPU acceleration for faster computation of certain metrics (div
 - PyTorch was not installed with CUDA support
 
 **For GPU acceleration, you need:**
+
 - NVIDIA GPU with CUDA support
 - CUDA drivers installed
 - PyTorch with CUDA support (install with `pip install torch --index-url https://download.pytorch.org/whl/cu118`)
 
 **Note:** GPU acceleration primarily benefits:
+
 - Text diversity analysis (Word2Vec, semantic analysis)
 - Privacy evaluation (Flair NER models)
 - Large dataset processing
@@ -151,6 +158,7 @@ SynEval supports GPU acceleration for faster computation of certain metrics (div
 For small datasets or CPU-only environments, the framework will run efficiently on CPU.
 
 ## Usage
+
 ### Running Evaluations
 
 The main entry point for the framework is `run.py`. This script allows you to evaluate synthetic data against original data using various metrics.
@@ -202,6 +210,7 @@ You can select one or more evaluation dimensions to run:
 - `--gpu-memory-fraction`: Fraction of GPU memory to use (0.0-1.0, default: 0.8)
 
 **Device Selection Examples:**
+
 ```bash
 # Use automatic device detection (default)
 python run.py --synthetic data.csv --original real.csv --metadata meta.json
@@ -299,14 +308,17 @@ Example metadata format:
 Fidelity measures how well the synthetic data preserves the statistical properties and patterns of the original data. This evaluation uses both SDV (Synthetic Data Vault) metrics and custom statistical analysis.
 
 #### Diagnostic Metrics (SDV-based)
+
 **Data Type**: Structured data only
 
 - **Data Validity**: Measures the percentage of valid data in synthetic dataset (0-1 scale)
+
   - **Algorithm**: SDV's diagnostic evaluation checks for data type consistency, missing value patterns, and constraint violations
   - **Score Calculation**: Percentage of rows that pass all validity checks divided by total rows
   - **Interpretation**: Higher scores indicate better data quality and adherence to original data constraints
 
 - **Data Structure**: Evaluates how well the synthetic data maintains the structural relationships of the original data (0-1 scale)
+
   - **Algorithm**: SDV analyzes primary key uniqueness, foreign key relationships, and referential integrity
   - **Score Calculation**: Weighted average of structural constraint compliance scores
   - **Interpretation**: Higher scores indicate better preservation of data relationships and constraints
@@ -317,14 +329,17 @@ Fidelity measures how well the synthetic data preserves the statistical properti
   - **Interpretation**: Comprehensive measure of basic data quality and structural integrity
 
 #### Quality Metrics (SDV-based)
+
 **Data Type**: Structured data only
 
 - **Column Shapes**: Measures how well the synthetic data preserves the distribution shapes of individual columns (0-1 scale)
+
   - **Algorithm**: SDV uses statistical tests (Kolmogorov-Smirnov for continuous, Chi-square for categorical) to compare distributions
   - **Score Calculation**: Average of distribution similarity scores across all columns, normalized to 0-1 scale
   - **Interpretation**: Higher scores indicate better preservation of individual column distributions
 
 - **Column Pair Trends**: Evaluates the preservation of relationships between column pairs (0-1 scale)
+
   - **Algorithm**: SDV analyzes correlation coefficients, mutual information, and conditional distributions between column pairs
   - **Score Calculation**: Average of pairwise relationship preservation scores across all column combinations
   - **Interpretation**: Higher scores indicate better preservation of inter-column relationships and correlations
@@ -335,23 +350,27 @@ Fidelity measures how well the synthetic data preserves the statistical properti
   - **Interpretation**: Comprehensive measure of statistical fidelity and relationship preservation
 
 #### Numerical Statistics Analysis (Custom)
+
 **Data Type**: Numerical columns only
 
 - **Basic Statistics Comparison**: Compares fundamental statistical measures between original and synthetic data
+
   - **Measures**: Mean, median, standard deviation, min/max, quartiles (Q25, Q75), skewness, kurtosis
   - **Algorithm**: Direct statistical calculation using pandas/numpy functions
   - **Score Calculation**: Relative differences calculated as |synthetic - original| / |original|
   - **Interpretation**: Lower relative differences indicate better statistical preservation
 
 - **Range Coverage**: Measures how much of the original data range is covered by synthetic data
+
   - **Algorithm**: Calculates overlap between original and synthetic value ranges
   - **Score Calculation**: Overlap range / Original range, where overlap = min(max_syn, max_orig) - max(min_syn, min_orig)
   - **Interpretation**: Higher coverage (closer to 1.0) indicates better range preservation
 
 - **Distribution Similarity**: Compares the shape and characteristics of data distributions
+
   - **KL Divergence**: Measures information loss between original and synthetic distributions
     - **Algorithm**: Kullback-Leibler divergence using histogram binning
-    - **Score Calculation**: Σ p(x) * log(p(x)/q(x)) where p=original, q=synthetic
+    - **Score Calculation**: Σ p(x) \* log(p(x)/q(x)) where p=original, q=synthetic
     - **Interpretation**: Lower values indicate more similar distributions (0 = identical)
   - **Histogram Intersection**: Measures overlap between distribution histograms
     - **Algorithm**: Calculates intersection of normalized histograms
@@ -361,25 +380,28 @@ Fidelity measures how well the synthetic data preserves the statistical properti
 - **Overall Fidelity Score**: Combined numerical fidelity metric
   - **Algorithm**: Weighted average of multiple preservation metrics
   - **Score Calculation**: Average of (mean preservation, std preservation, skewness preservation, range coverage, histogram similarity)
-  - **Interpretation**: 
+  - **Interpretation**:
     - 0.9-1.0: Excellent fidelity
-    - 0.8-0.9: Good fidelity  
+    - 0.8-0.9: Good fidelity
     - 0.7-0.8: Fair fidelity
     - 0.6-0.7: Poor fidelity
     - <0.6: Very poor fidelity
 
 #### Text-Specific Metrics (for text columns)
+
 **Data Type**: Text columns only
 
 - **Length Statistics**: Compares text length distributions between original and synthetic data
+
   - **Algorithm**: Character count and word count analysis using string operations
   - **Measures**: Mean and standard deviation of text lengths and word counts
   - **Score Calculation**: Direct statistical comparison of length distributions
   - **Interpretation**: Similar means and standard deviations indicate good text length preservation
 
 - **Keyword Analysis**: Compares the most important keywords (TF-IDF scores) between datasets
+
   - **Algorithm**: TF-IDF (Term Frequency-Inverse Document Frequency) vectorization
-  - **Score Calculation**: 
+  - **Score Calculation**:
     1. Fit TF-IDF vectorizer on original data
     2. Transform both datasets using the same vectorizer
     3. Calculate mean TF-IDF scores for each term
@@ -388,7 +410,7 @@ Fidelity measures how well the synthetic data preserves the statistical properti
 
 - **Sentiment Analysis**: Compares sentiment distributions between datasets
   - **Algorithm**: TextBlob sentiment analysis using polarity scores (-1 to +1)
-  - **Score Calculation**: 
+  - **Score Calculation**:
     1. Calculate sentiment polarity for each text
     2. Compute mean and standard deviation of sentiment scores
     3. Categorize into negative (<-0.1), neutral (-0.1 to 0.1), positive (>0.1)
@@ -401,11 +423,12 @@ Fidelity measures how well the synthetic data preserves the statistical properti
 Utility evaluates how useful the synthetic data is for downstream machine learning tasks using the Train on Synthetic, Test on Real (TSTR) methodology.
 
 #### Task Information
+
 **Data Type**: Both structured and text data
 
 - **Task Type**: Classification, regression, or text classification
   - **Classification**: For categorical target variables
-  - **Regression**: For numerical target variables  
+  - **Regression**: For numerical target variables
   - **Text Classification**: For text input with categorical output
 - **Input Columns**: Features used for prediction
 - **Output Columns**: Target variables to predict
@@ -413,30 +436,36 @@ Utility evaluates how useful the synthetic data is for downstream machine learni
 - **Test Size**: Number of real samples used for testing
 
 #### Model Performance Comparison
+
 **Data Type**: Both structured and text data
 
 - **Real Data Model**: Performance metrics when training on real data
 - **Synthetic Data Model**: Performance metrics when training on synthetic data
 
 #### Classification Metrics (for classification tasks)
+
 **Data Type**: Both structured and text data
 
 - **Accuracy**: Overall prediction accuracy
+
   - **Algorithm**: sklearn.metrics.accuracy_score
   - **Score Calculation**: (Correct predictions) / (Total predictions)
   - **Interpretation**: Higher accuracy indicates better model performance
 
 - **Precision**: Precision for each class
+
   - **Algorithm**: sklearn.metrics.precision_score with per-class calculation
   - **Score Calculation**: True Positives / (True Positives + False Positives) for each class
   - **Interpretation**: Higher precision indicates fewer false positive predictions
 
 - **Recall**: Recall for each class
+
   - **Algorithm**: sklearn.metrics.recall_score with per-class calculation
   - **Score Calculation**: True Positives / (True Positives + False Negatives) for each class
   - **Interpretation**: Higher recall indicates fewer false negative predictions
 
 - **F1-Score**: Harmonic mean of precision and recall
+
   - **Algorithm**: sklearn.metrics.f1_score
   - **Score Calculation**: 2 × (Precision × Recall) / (Precision + Recall)
   - **Interpretation**: Balanced measure of precision and recall
@@ -446,14 +475,17 @@ Utility evaluates how useful the synthetic data is for downstream machine learni
   - **Micro**: Global metric calculated from total true/false positives/negatives
 
 #### Regression Metrics (for regression tasks)
+
 **Data Type**: Numerical target variables only
 
 - **R² Score**: Coefficient of determination
+
   - **Algorithm**: sklearn.metrics.r2_score
   - **Score Calculation**: 1 - (SS_res / SS_tot) where SS_res = sum of squared residuals, SS_tot = total sum of squares
   - **Interpretation**: Higher R² (closer to 1.0) indicates better model fit
 
 - **Mean Squared Error**: Average squared prediction error
+
   - **Algorithm**: sklearn.metrics.mean_squared_error
   - **Score Calculation**: Average of (predicted - actual)²
   - **Interpretation**: Lower MSE indicates better predictions
@@ -464,14 +496,17 @@ Utility evaluates how useful the synthetic data is for downstream machine learni
   - **Interpretation**: Lower RMSE indicates better predictions (in same units as target)
 
 #### Feature Processing
+
 **Data Type**: Both structured and text data
 
 - **Text Processing**: For text input columns
+
   - **Algorithm**: TF-IDF vectorization with sklearn
   - **Parameters**: max_features=1000, min_df=2, max_df=0.95, stop_words='english'
   - **Process**: Convert text to numerical features using term frequency-inverse document frequency
 
 - **Categorical Processing**: For categorical input columns
+
   - **Algorithm**: One-hot encoding using pandas.get_dummies()
   - **Process**: Convert categorical variables to binary columns
 
@@ -486,9 +521,11 @@ Utility evaluates how useful the synthetic data is for downstream machine learni
 Diversity assesses the variety and uniqueness of the generated data across multiple dimensions.
 
 #### Tabular Diversity Metrics
+
 **Data Type**: Structured data only
 
 **Coverage Metrics**
+
 - **Column Coverage**: Percentage of original data values/range covered by synthetic data
   - **For numerical columns**: Range overlap percentage
     - **Algorithm**: Calculate overlap between original and synthetic value ranges
@@ -498,6 +535,7 @@ Diversity assesses the variety and uniqueness of the generated data across multi
     - **Score Calculation**: (Common categories) / (Original categories) × 100
 
 **Uniqueness Metrics**
+
 - **Synthetic Duplicate Ratio**: Percentage of duplicate rows in synthetic data
   - **Algorithm**: pandas.drop_duplicates() to identify unique rows
   - **Score Calculation**: (Total rows - Unique rows) / Total rows × 100
@@ -507,6 +545,7 @@ Diversity assesses the variety and uniqueness of the generated data across multi
   - **Score Calculation**: (Synthetic duplicate ratio) / (Original duplicate ratio) × 100
 
 **Numerical Metrics** (for numerical columns)
+
 - **Statistical Differences**: Differences in mean, standard deviation, skewness, and kurtosis
   - **Algorithm**: Direct statistical calculation and comparison
   - **Score Calculation**: |Synthetic value - Original value| / |Original value| for relative differences
@@ -521,6 +560,7 @@ Diversity assesses the variety and uniqueness of the generated data across multi
   - **Score Calculation**: KL divergence and similarity = exp(-KL_divergence)
 
 **Categorical Metrics** (for categorical columns)
+
 - **Category Coverage**: Percentage of original categories present in synthetic data
   - **Algorithm**: Set intersection of category sets
   - **Score Calculation**: (Common categories) / (Original categories) × 100
@@ -538,6 +578,7 @@ Diversity assesses the variety and uniqueness of the generated data across multi
   - **Score Calculation**: (Common rare categories) / (Total rare categories) × 100
 
 **Entropy Metrics**
+
 - **Column Entropy**: Information content for each column
   - **Algorithm**: Shannon entropy calculation for each column
   - **Score Calculation**: -Σ p(x) × log2(p(x)) where p(x) is probability of value x
@@ -548,9 +589,11 @@ Diversity assesses the variety and uniqueness of the generated data across multi
   - **Score Calculation**: (Synthetic entropy) / (Original entropy)
 
 #### Text Diversity Metrics
+
 **Data Type**: Text columns only
 
 **Lexical Diversity**
+
 - **N-gram Analysis**: For n=1 to 5, measures:
   - **Algorithm**: NLTK n-gram generation and analysis
   - **total**: Total number of n-grams
@@ -562,8 +605,9 @@ Diversity assesses the variety and uniqueness of the generated data across multi
     - **Score Calculation**: Entropy / log2(unique_count)
 
 **Semantic Diversity**
+
 - **Total MST Weight**: Total weight of minimum spanning tree connecting text embeddings
-  - **Algorithm**: 
+  - **Algorithm**:
     1. Train Word2Vec model on text corpus
     2. Generate embeddings for each text
     3. Calculate cosine distances between all pairs
@@ -577,6 +621,7 @@ Diversity assesses the variety and uniqueness of the generated data across multi
   - **Score Calculation**: Distinct nodes / Total texts
 
 **Sentiment Diversity**
+
 - **Sentiment by Rating**: Positive sentiment percentage for each rating level
   - **Algorithm**: Flair sentiment classifier applied to each text
   - **Score Calculation**: Percentage of positive sentiment texts for each rating
@@ -588,6 +633,7 @@ Diversity assesses the variety and uniqueness of the generated data across multi
   - **Score Calculation**: Average of (1 - |actual - ideal|) across all ratings
 
 **Interpretation**: Higher diversity scores indicate more varied and unique synthetic data. Good diversity should show:
+
 - Coverage scores above 80%
 - Duplicate ratios below 5%
 - Entropy ratios close to 1.0
@@ -603,8 +649,8 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
 
 - **Exact Match (row-level duplicates):** Default alert at **>5%** (configurable). This is a **conservative heuristic**: in most non-templated domains, high identical duplication may indicate memorization. But some datasets (short reviews, limited vocab) naturally duplicate. Always compare with **original duplication rate**, **approximate matching**, and **Anonymeter risks (singling-out, linkability, inference)** before labeling it leakage [[arXiv][2]].
 
-
 #### Exact Match Analysis
+
 **Data Type**: Both structured and text data
 
 - **Exact Match Percentage**: Percentage of synthetic rows that exactly match original rows
@@ -613,10 +659,12 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
   - **Interpretation with context**: Report also includes **original duplication rate** and **approximate matching** (edit distance, token Jaccard). This helps distinguish benign repetition from real leakage. Default alert threshold is 5% (configurable). See [arXiv][2].
 
 #### Membership Inference Attack
+
 **Data Type**: Both structured and text data
 
 - **MIA AUC Score**: Area under ROC curve for membership inference classifier (0-1 scale)
-  - **Algorithm**: 
+
+  - **Algorithm**:
     1. Combine synthetic and original data with labels (1=synthetic, 0=original)
     2. Extract features using TF-IDF for text and one-hot encoding for categorical
     3. Train RandomForest classifier to distinguish between datasets
@@ -630,12 +678,14 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
   - **Algorithm**: Mean of classifier prediction probabilities for original samples
 
 #### Named Entity Recognition (for text data)
+
 **Data Type**: Text columns only
 
 - **Entity Statistics**: Count and density of named entities (persons, organizations, locations)
+
   - **Algorithm**: Flair NER model (flair/ner-english-large)
   - **Entity Types**: PER (Person), ORG (Organization), LOC (Location), MISC (Miscellaneous)
-  - **Score Calculation**: 
+  - **Score Calculation**:
     - Total entities = sum of all detected entities
     - Entity density = total entities / total tokens
   - **Risk Level**: High if entity density >0.1 or overlap >50%
@@ -645,12 +695,14 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
   - **Score Calculation**: (Common entities) / (Original entities) × 100
 
 #### Nominal Mentions Analysis (for text data)
+
 **Data Type**: Text columns only
 
 - **Nominal Statistics**: Count and density of person/role/relationship mentions
+
   - **Algorithm**: spaCy NLP pipeline with custom filtering
   - **Detection**: Nouns and proper nouns in subject positions or matching role/relationship patterns
-  - **Score Calculation**: 
+  - **Score Calculation**:
     - Total nominals = sum of detected nominal mentions
     - Nominal density = total nominals / total tokens
   - **Risk Level**: High if nominal density >0.15 or overlap >50%
@@ -660,10 +712,12 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
   - **Score Calculation**: (Common nominals) / (Original nominals) × 100
 
 #### Stylistic Outliers Analysis (for text data)
+
 **Data Type**: Text columns only
 
 - **Outlier Statistics**: Number and percentage of stylistically unique texts
-  - **Algorithm**: 
+
+  - **Algorithm**:
     1. Generate Word2Vec embeddings for all texts
     2. Calculate cosine distances between all text pairs
     3. Identify texts with average distance > 2 standard deviations from mean
@@ -674,11 +728,13 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
   - **Algorithm**: Compare outlier percentages and patterns between datasets
 
 #### Anonymeter Re-identification Risks
+
 **Data Type**: Structured data only
 
 - **Singling Out Attack (Univariate)**: Risk of identifying unique individuals using single attributes
+
   - **Algorithm**: Anonymeter's SinglingOutEvaluator with univariate mode
-  - **Process**: 
+  - **Process**:
     1. Find unique combinations of single attributes in synthetic data
     2. Check if these combinations exist in original data
     3. Calculate attack success rate vs. baseline random guessing
@@ -686,21 +742,24 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
   - **Risk Level**: High if risk > 0.5, Low otherwise
 
 - **Singling Out Attack (Multivariate)**: Risk of identifying unique individuals using attribute combinations
+
   - **Algorithm**: Anonymeter's SinglingOutEvaluator with multivariate mode
   - **Process**: Same as univariate but using combinations of up to 4 attributes
   - **Score Calculation**: Same as univariate
 
 - **Linkability Attack**: Risk of linking synthetic records to original records
+
   - **Algorithm**: Anonymeter's LinkabilityEvaluator
-  - **Process**: 
+  - **Process**:
     1. Use auxiliary columns to find similar records
     2. Attempt to link synthetic records to original records
     3. Calculate success rate vs. baseline
   - **Score Calculation**: Same as singling out attacks
 
 - **Inference Attack**: Risk of inferring sensitive attributes from other attributes
+
   - **Algorithm**: Anonymeter's InferenceEvaluator
-  - **Process**: 
+  - **Process**:
     1. For each column as "secret", use other columns as auxiliary
     2. Train model to predict secret from auxiliary columns
     3. Test on synthetic data and calculate inference success
@@ -711,8 +770,9 @@ Thresholds are therefore **configurable**, and reports also include **baseline c
   - **Score Calculation**: max(singling_out_uni, singling_out_multi, linkability, max_inference_risks)
 
 **Interpretation**: Lower risk scores indicate better privacy protection:
+
 - **Low Risk**: Scores <0.3, good privacy protection
-- **Medium Risk**: Scores 0.3-0.7, moderate privacy concerns  
+- **Medium Risk**: Scores 0.3-0.7, moderate privacy concerns
 - **High Risk**: Scores >0.7, significant privacy vulnerabilities
 
 ### Output Format
@@ -773,12 +833,11 @@ The evaluation results are returned in JSON format. Each evaluation dimension wi
 ```
 
 ### References & Further Reading
+
 [1]: https://arxiv.org/abs/2302.12580 "[2302.12580] Membership Inference Attacks against Synthetic Data"
 [2]: https://arxiv.org/abs/2211.10459 "A Unified Framework for Quantifying Privacy Risk in Synthetic Data"
 [3]: https://docs.sdv.dev/sdmetrics/data-metrics/diagnostic/diagnostic-report "Diagnostic Report | SDMetrics"
 [4]: https://arxiv.org/abs/2404.14445 "A Multi-Faceted Evaluation Framework for Assessing Synthetic Data"
-
-
 
 ## Data Requirements
 
@@ -799,6 +858,7 @@ The framework performs several validation checks:
 ### Device-Related Issues
 
 **CUDA Out of Memory Error:**
+
 ```bash
 # Reduce GPU memory usage
 python run.py --device cuda --gpu-memory-fraction 0.5
@@ -808,16 +868,19 @@ python run.py --force-cpu
 ```
 
 **CUDA Not Available Warning:**
+
 - Install CUDA-enabled PyTorch: `pip install torch --index-url https://download.pytorch.org/whl/cu118`
 - Verify CUDA installation: `python -c "import torch; print(torch.cuda.is_available())"`
 - Use CPU mode: `python run.py --device cpu`
 
 **Slow Performance:**
+
 - For large datasets, ensure GPU is being used: `python run.py --device cuda`
 - Check GPU memory usage and adjust `--gpu-memory-fraction` if needed
 - Consider using CPU for small datasets: `python run.py --device cpu`
 
 **Device Detection Issues:**
+
 - Force specific device: `python run.py --device cpu` or `python run.py --device cuda`
 - Check system GPU availability: `nvidia-smi` (Linux/Windows) or `system_profiler SPDisplaysDataType` (macOS)
 
@@ -837,7 +900,6 @@ SynEval includes a specialized tool for analyzing large text datasets using Name
 - **Caching**: Automatic caching for faster subsequent runs
 - **Progress Tracking**: Real-time progress bars for long-running operations
 
-
 #### Usage
 
 ##### Basic Usage
@@ -851,6 +913,7 @@ python amazon_fashion_ner_analysis_fast.py
 ##### Configuration Options
 
 You can modify the script to:
+
 - Use a subset of data for testing
 - Change the text column name
 - Adjust batch sizes for your hardware
@@ -869,21 +932,24 @@ sample_size = None  # Set to 10000 to test with first 10K records
 The script generates several report files in the `./reports` directory:
 
 ##### 1. Main Analysis Report
+
 - **File**: `amazon_fashion_ner_report_YYYYMMDD_HHMMSS.txt`
-- **Content**: 
+- **Content**:
   - Dataset statistics
   - Entity counts by type
   - Overall entity density analysis
   - Sample entities for each type
 
 ##### 2. Top 200 High Entity Texts Report
+
 - **File**: `top_200_high_entity_texts_YYYYMMDD_HHMMSS.txt`
-- **Content**: 
+- **Content**:
   - 200 texts with the highest entity counts
   - Entity density for each text
   - List of entities found in each text
 
 ##### 3. Entity Density Analysis Report
+
 - **File**: `entity_density_analysis_YYYYMMDD_HHMMSS.txt`
 - **Content**:
   - Detailed density statistics (mean, median, percentiles)
@@ -891,7 +957,8 @@ The script generates several report files in the `./reports` directory:
   - Top 50 texts by entity density
 
 ##### 4. Visualizations
-- **Files**: 
+
+- **Files**:
   - `entity_distribution_YYYYMMDD_HHMMSS.png`
   - `entity_density_histogram_YYYYMMDD_HHMMSS.png`
   - `entity_count_vs_density_YYYYMMDD_HHMMSS.png`
@@ -908,11 +975,13 @@ The script identifies and categorizes entities into:
 #### Entity Density Analysis
 
 Entity density is calculated as:
+
 ```
 Entity Density = Number of Entities / Number of Tokens
 ```
 
 The analysis provides:
+
 - **Statistical measures**: Mean, median, standard deviation, percentiles
 - **Distribution categories**:
   - Low density (< 0.01): Minimal entity presence
@@ -926,7 +995,7 @@ The analysis provides:
 1. **Memory Usage**: The script processes data in batches to manage memory
 2. **Processing Time**: Expect 2-4 hours for full dataset analysis
 3. **Caching**: Results are cached for faster subsequent runs
-4. **Hardware Requirements**: 
+4. **Hardware Requirements**:
    - Minimum 8GB RAM
    - Multi-core CPU recommended
    - SSD storage for faster I/O
@@ -940,6 +1009,7 @@ The analysis provides:
 #### Sample Output
 
 ##### Main Report Excerpt
+
 ```
 ================================================================================
 AMAZON FASHION DATASET - NAMED ENTITY RECOGNITION ANALYSIS
@@ -987,6 +1057,7 @@ Density distribution:
 ```
 
 ##### Top 200 Report Excerpt
+
 ```
 ================================================================================
 TOP 200 TEXTS WITH HIGHEST ENTITY COUNTS
@@ -1072,6 +1143,10 @@ for start_idx in range(0, total_records, chunk_size):
 ## Contributing
 
 As we implement more evaluation metrics, this README will be updated with additional documentation for each component.
+
+## Acknowledgements
+
+This project is sponsored by eBay Inc.
 
 ## License
 
