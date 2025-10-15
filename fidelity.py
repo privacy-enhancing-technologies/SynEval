@@ -6,8 +6,6 @@ from typing import Dict, List, Tuple, Optional
 from textblob import TextBlob
 from collections import Counter
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sdv.evaluation.single_table import run_diagnostic, evaluate_quality
-from sdv.metadata import SingleTableMetadata
 import logging
 import os
 import hashlib
@@ -15,20 +13,34 @@ import json
 import pickle
 from pathlib import Path
 
+try:
+    from sdv.evaluation.single_table import run_diagnostic, evaluate_quality  # type: ignore
+    from sdv.metadata import SingleTableMetadata  # type: ignore
+    SDV_AVAILABLE = True
+    SDV_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - optional dependency
+    run_diagnostic = None  # type: ignore
+    evaluate_quality = None  # type: ignore
+    SingleTableMetadata = None  # type: ignore
+    SDV_AVAILABLE = False
+    SDV_IMPORT_ERROR = exc
+
+try:
+    import torch  # type: ignore
+    TORCH_AVAILABLE = True
+except ImportError:  # pragma: no cover - environment specific
+    torch = None  # type: ignore
+    TORCH_AVAILABLE = False
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # GPU acceleration setup
 def setup_gpu_acceleration():
     """Setup GPU acceleration if available."""
-    try:
-        import torch
-        if torch.cuda.is_available():
-            return 'cuda'
-        else:
-            return 'cpu'
-    except ImportError:
-        return 'cpu'
+    if TORCH_AVAILABLE and torch.cuda.is_available():
+        return 'cuda'
+    return 'cpu'
 
 # Initialize device as None - will be set when evaluator is created
 # DEVICE = None  # Now managed by device_manager
@@ -148,6 +160,12 @@ class FidelityEvaluator:
             selected_metrics: List of specific metrics to run
             device: Device to use for computation ('auto', 'cpu', 'cuda')
         """
+        if not SDV_AVAILABLE:
+            raise ImportError(
+                "Fidelity metrics require the optional 'sdv' dependency which could not be imported. "
+                f"Original error: {SDV_IMPORT_ERROR}"
+            )
+
         self.synthetic_data = synthetic_data
         self.original_data = original_data
         self.metadata = metadata
@@ -173,10 +191,11 @@ class FidelityEvaluator:
         if device == 'auto':
             self.device = setup_gpu_acceleration()
         elif device == 'cuda':
-            if torch.cuda.is_available():
+            if TORCH_AVAILABLE and torch.cuda.is_available():
                 self.device = 'cuda'
             else:
-                self.logger.warning("CUDA requested but not available. Falling back to CPU.")
+                warn_reason = "PyTorch is not installed" if not TORCH_AVAILABLE else "CUDA device not available"
+                self.logger.warning(f"CUDA requested but unavailable ({warn_reason}). Falling back to CPU.")
                 self.device = 'cpu'
         else:  # cpu
             self.device = 'cpu'

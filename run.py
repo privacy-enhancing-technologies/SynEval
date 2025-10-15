@@ -11,7 +11,11 @@ from utility import UtilityEvaluator
 from diversity import DiversityEvaluator
 from privacy import PrivacyEvaluator
 import logging
-import torch
+
+try:
+    import torch  # type: ignore
+except ImportError:  # pragma: no cover - environment specific
+    torch = None  # type: ignore
 
 
 def configure_device(device_preference: str, force_cpu: bool = False, gpu_memory_fraction: float = 0.8) -> str:
@@ -26,7 +30,9 @@ def configure_device(device_preference: str, force_cpu: bool = False, gpu_memory
     Returns:
         str: The configured device ('cpu' or 'cuda')
     """
-    if force_cpu:
+    if force_cpu or torch is None:
+        if device_preference == 'cuda' and torch is None:
+            print("Warning: PyTorch is required for CUDA execution but is not installed. Falling back to CPU.")
         return 'cpu'
     
     if device_preference == 'cpu':
@@ -215,21 +221,53 @@ def main():
 
     if 'fidelity' in dimensions:
         logger.info("Running fidelity evaluation...")
-        results['fidelity'] = evaluator.evaluate_fidelity(selected_metrics=args.fidelity_metrics)
+        try:
+            results['fidelity'] = evaluator.evaluate_fidelity(selected_metrics=args.fidelity_metrics)
+            logger.info("Fidelity evaluation completed successfully")
+        except ImportError as e:
+            logger.warning(f"Skipping fidelity evaluation: {e}")
+            results['fidelity'] = {
+                'skipped': True,
+                'reason': str(e)
+            }
+        except Exception as e:
+            logger.error(f"Error in fidelity evaluation: {str(e)}")
+            results['fidelity'] = {
+                'error': str(e)
+            }
 
     if 'utility' in dimensions:
         logger.info("Running utility evaluation...")
-        results['utility'] = evaluator.evaluate_utility(
-            input_columns=args.utility_input,
-            output_columns=args.utility_output,
-            selected_metrics=args.utility_metrics
-        )
+        try:
+            results['utility'] = evaluator.evaluate_utility(
+                input_columns=args.utility_input,
+                output_columns=args.utility_output,
+                selected_metrics=args.utility_metrics
+            )
+            logger.info("Utility evaluation completed successfully")
+        except ImportError as e:
+            logger.warning(f"Skipping utility evaluation: {e}")
+            results['utility'] = {
+                'skipped': True,
+                'reason': str(e)
+            }
+        except Exception as e:
+            logger.error(f"Error in utility evaluation: {str(e)}")
+            results['utility'] = {
+                'error': str(e)
+            }
 
     if 'diversity' in dimensions:
         logger.info("Running diversity evaluation...")
         try:
             results['diversity'] = evaluator.evaluate_diversity(selected_metrics=args.diversity_metrics)
             logger.info("Diversity evaluation completed successfully")
+        except ImportError as e:
+            logger.warning(f"Skipping diversity evaluation: {e}")
+            results['diversity'] = {
+                'skipped': True,
+                'reason': str(e)
+            }
         except Exception as e:
             logger.error(f"Error in diversity evaluation: {str(e)}")
             results['diversity'] = {
@@ -243,6 +281,12 @@ def main():
         try:
             results['privacy'] = evaluator.evaluate_privacy(selected_metrics=args.privacy_metrics)
             logger.info("Privacy evaluation completed successfully")
+        except ImportError as e:
+            logger.warning(f"Skipping privacy evaluation: {e}")
+            results['privacy'] = {
+                'skipped': True,
+                'reason': str(e)
+            }
         except Exception as e:
             logger.error(f"Error in privacy evaluation: {str(e)}")
             results['privacy'] = {

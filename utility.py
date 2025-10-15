@@ -23,6 +23,13 @@ from sklearn.cross_decomposition import CCA
 from sklearn.preprocessing import OneHotEncoder
 import re
 
+try:
+    import torch  # type: ignore
+    TORCH_AVAILABLE = True
+except ImportError:  # pragma: no cover - environment specific
+    torch = None  # type: ignore
+    TORCH_AVAILABLE = False
+
 # 1. Sentiment-Rating Correlation
 from nltk.sentiment import SentimentIntensityAnalyzer
 
@@ -71,14 +78,9 @@ logger = logging.getLogger(__name__)
 # GPU acceleration setup
 def setup_gpu_acceleration():
     """Setup GPU acceleration if available."""
-    try:
-        import torch
-        if torch.cuda.is_available():
-            return 'cuda'
-        else:
-            return 'cpu'
-    except ImportError:
-        return 'cpu'
+    if TORCH_AVAILABLE and torch.cuda.is_available():
+        return 'cuda'
+    return 'cpu'
 
 # Initialize device as None - will be set when evaluator is created
 DEVICE = None
@@ -222,10 +224,11 @@ class UtilityEvaluator:
         if device == 'auto':
             self.device = setup_gpu_acceleration()
         elif device == 'cuda':
-            if torch.cuda.is_available():
+            if TORCH_AVAILABLE and torch.cuda.is_available():
                 self.device = 'cuda'
             else:
-                logger.warning("CUDA requested but not available. Falling back to CPU.")
+                warn_reason = "PyTorch is not installed" if not TORCH_AVAILABLE else "CUDA device not available"
+                logger.warning(f"CUDA requested but unavailable ({warn_reason}). Falling back to CPU.")
                 self.device = 'cpu'
         else:  # cpu
             self.device = 'cpu'
@@ -406,7 +409,7 @@ class UtilityEvaluator:
                     X_test = vectorizer.transform(X_test[text_columns[0]].fillna(''))
                     
                     # Convert to GPU tensors if available for faster computation
-                    if self.device == 'cuda':
+                    if self.device == 'cuda' and TORCH_AVAILABLE:
                         import torch
                         X_train_real = torch.tensor(X_train_real.toarray(), device='cuda', dtype=torch.float32)
                         X_train_syn = torch.tensor(X_train_syn.toarray(), device='cuda', dtype=torch.float32)
@@ -426,7 +429,7 @@ class UtilityEvaluator:
                     X_test_other = test_data[other_columns].fillna(0).values
                     
                     # Convert to GPU tensors if available
-                    if self.device == 'cuda':
+                    if self.device == 'cuda' and TORCH_AVAILABLE:
                         import torch
                         X_train_real_other = torch.tensor(X_train_real_other, device='cuda', dtype=torch.float32)
                         X_train_syn_other = torch.tensor(X_train_syn_other, device='cuda', dtype=torch.float32)
@@ -434,7 +437,7 @@ class UtilityEvaluator:
                     
                     # Combine with text features if they exist
                     if text_columns:
-                        if self.device == 'cuda':
+                        if self.device == 'cuda' and TORCH_AVAILABLE:
                             X_train_real = torch.cat([X_train_real, X_train_real_other], dim=1)
                             X_train_syn = torch.cat([X_train_syn, X_train_syn_other], dim=1)
                             X_test = torch.cat([X_test, X_test_other], dim=1)

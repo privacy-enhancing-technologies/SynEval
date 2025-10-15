@@ -12,9 +12,6 @@ import math
 from gensim.models import Word2Vec
 from sklearn.metrics.pairwise import cosine_distances
 import networkx as nx
-from flair.models import TextClassifier
-from flair.data import Sentence
-import torch
 import logging
 import json
 import os
@@ -25,11 +22,26 @@ import pickle
 from scipy.spatial.distance import pdist, squareform
 from scipy.sparse.csgraph import minimum_spanning_tree
 
+try:
+    import torch  # type: ignore
+    TORCH_AVAILABLE = True
+except ImportError:  # pragma: no cover - environment varies
+    torch = None  # type: ignore
+    TORCH_AVAILABLE = False
+
+try:
+    from flair.models import TextClassifier  # type: ignore
+    from flair.data import Sentence  # type: ignore
+    FLAIR_AVAILABLE = True
+    FLAIR_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - optional dependency
+    TextClassifier = None  # type: ignore
+    Sentence = None  # type: ignore
+    FLAIR_AVAILABLE = False
+    FLAIR_IMPORT_ERROR = exc
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Device management for Flair models
-import torch
 
 # Download required NLTK data
 # Set up local NLTK data directory
@@ -52,22 +64,37 @@ download_nltk_data_if_needed('punkt')
 download_nltk_data_if_needed('stopwords')
 download_nltk_data_if_needed('punkt_tab')
 
-def get_device():
+def get_device() -> str:
     """
-    Get the best available device (CUDA if available, otherwise CPU).
+    Get the best available device label.
     """
-    if torch.cuda.is_available():
-        return torch.device('cuda')
-    else:
-        return torch.device('cpu')
+    if TORCH_AVAILABLE and torch.cuda.is_available():
+        return 'cuda'
+    return 'cpu'
 
-def ensure_tensor_device(tensor, device):
+def ensure_tensor_device(tensor, device: str):
     """
     Ensure a tensor is on the specified device.
     """
-    if tensor is not None and tensor.device != device:
-        return tensor.to(device)
+    if tensor is None or not TORCH_AVAILABLE:
+        return tensor
+    target = torch.device(device)
+    if tensor.device != target:
+        return tensor.to(target)
     return tensor
+
+
+def require_flair():
+    """Raise a helpful error if Flair (and by extension torch) is unavailable."""
+    if not FLAIR_AVAILABLE:
+        raise ImportError(
+            "Flair is required for this metric but is not installed or could not be imported. "
+            f"Original error: {FLAIR_IMPORT_ERROR}"
+        )
+    if not TORCH_AVAILABLE:
+        raise ImportError(
+            "PyTorch is required for Flair-based metrics but is not installed."
+        )
 
 def compute_dataset_fingerprint(data: pd.DataFrame, metadata: Dict) -> str:
     """
@@ -203,18 +230,18 @@ class DiversityEvaluator:
         if device == 'auto':
             self.device = get_device()
         elif device == 'cuda':
-            if torch.cuda.is_available():
-                self.device = torch.device('cuda')
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                self.device = 'cuda'
             else:
                 logger.warning("CUDA requested but not available. Falling back to CPU.")
-                self.device = torch.device('cpu')
+                self.device = 'cpu'
         else:  # cpu
-            self.device = torch.device('cpu')
+            self.device = 'cpu'
         
         logger.info(f"Using device: {self.device}")
         
         # GPU acceleration settings
-        if self.device.type == 'cuda':
+        if self.device == 'cuda':
             self.batch_size = 2000  # Larger batches for GPU
             logger.info("GPU acceleration enabled")
         else:
@@ -227,7 +254,18 @@ class DiversityEvaluator:
         ]
         
         # Use all metrics if none specified
-        self.selected_metrics = selected_metrics if selected_metrics else self.available_metrics
+        self.selected_metrics = (
+            selected_metrics.copy() if selected_metrics else self.available_metrics.copy()
+        )
+        self.unavailable_metrics: Dict[str, str] = {}
+        if 'text_diversity' in self.selected_metrics and not FLAIR_AVAILABLE:
+            reason = "requires Flair (and PyTorch) for sentiment analysis"
+            if not TORCH_AVAILABLE:
+                reason = "requires PyTorch and Flair for sentiment analysis"
+            elif FLAIR_IMPORT_ERROR:
+                reason = f"requires Flair; import failed with: {FLAIR_IMPORT_ERROR}"
+            self.unavailable_metrics['text_diversity'] = reason
+            self.selected_metrics.remove('text_diversity')
         
     def _get_text_columns(self) -> List[str]:
         """Get list of text columns from metadata."""
@@ -767,7 +805,7 @@ class DiversityEvaluator:
             embeddings = np.stack(df["embedding"].values)
             
             # Move to GPU if available
-            if self.device.type == 'cuda':
+            if self.device == 'cuda' and TORCH_AVAILABLE:
                 embeddings = torch.tensor(embeddings, device=self.device)
                 logger.info("Using GPU for distance calculations")
                 
@@ -907,6 +945,7 @@ class DiversityEvaluator:
             if 'rating' not in df.columns:
                 logger.warning("Rating column not found, using default sentiment analysis")
                 # Detect best available device
+                require_flair()
                 device = get_device()
                 logger.info(f"Using device: {device} for sentiment classification")
                 
@@ -943,6 +982,7 @@ class DiversityEvaluator:
                 return result
             
             # Detect best available device
+            require_flair()
             device = get_device()
             logger.info(f"Using device: {device} for sentiment classification")
             
@@ -1035,5 +1075,13 @@ class DiversityEvaluator:
                 results['text_diversity'] = self.evaluate_text_diversity()
             else:
                 logger.info("No text columns found in metadata, skipping text diversity evaluation")
+        elif self.unavailable_metrics.get('text_diversity'):
+            results['text_diversity'] = {
+                'skipped': True,
+                'reason': self.unavailable_metrics['text_diversity']
+            }
+        
+        if self.unavailable_metrics:
+            results['skipped_metrics'] = self.unavailable_metrics
         
         return results

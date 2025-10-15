@@ -22,9 +22,6 @@ from anonymeter.stats.confidence import EvaluationResults
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
-from flair.data import Sentence
-from flair.models import SequenceTagger
-import torch
 from functools import lru_cache
 import threading
 import warnings
@@ -34,11 +31,26 @@ from pathlib import Path
 import pickle
 from sklearn.neighbors import NearestNeighbors
 
+try:
+    import torch  # type: ignore
+    TORCH_AVAILABLE = True
+except ImportError:  # pragma: no cover - environment specific
+    torch = None  # type: ignore
+    TORCH_AVAILABLE = False
+
+try:
+    from flair.data import Sentence  # type: ignore
+    from flair.models import SequenceTagger  # type: ignore
+    FLAIR_AVAILABLE = True
+    FLAIR_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - optional dependency
+    Sentence = None  # type: ignore
+    SequenceTagger = None  # type: ignore
+    FLAIR_AVAILABLE = False
+    FLAIR_IMPORT_ERROR = exc
+
 # Suppress warnings
 warnings.filterwarnings('ignore')
-
-# Device management for Flair models
-import torch
 
 # Set up local NLTK data directory
 import os
@@ -316,6 +328,14 @@ def get_flair_model(model_name: str = 'flair/ner-english-large') -> SequenceTagg
     """
     Get or load Flair model with caching and device management.
     """
+    if not FLAIR_AVAILABLE:
+        raise ImportError(
+            "Flair is required for text privacy metrics but could not be imported. "
+            f"Original error: {FLAIR_IMPORT_ERROR}"
+        )
+    if not TORCH_AVAILABLE:
+        raise ImportError("PyTorch is required for Flair-based metrics but is not installed.")
+
     with _model_lock:
         if model_name not in _model_cache:
             # Load the model
@@ -325,7 +345,7 @@ def get_flair_model(model_name: str = 'flair/ner-english-large') -> SequenceTagg
             _model_cache[model_name].eval()
             
             # Move model to the best available device (compatible with all Flair versions)
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = 'cuda' if TORCH_AVAILABLE and torch.cuda.is_available() else 'cpu'
             _model_cache[model_name] = _model_cache[model_name].to(device)
                 
         return _model_cache[model_name]
@@ -334,8 +354,10 @@ def ensure_tensor_device(tensor, device):
     """
     Ensure a tensor is on the specified device.
     """
-    if tensor is not None and tensor.device != device:
-        return tensor.to(device)
+    if tensor is not None and TORCH_AVAILABLE:
+        target = torch.device(device)
+        if tensor.device != target:
+            return tensor.to(target)
     return tensor
 
 class PrivacyEvaluator:
@@ -368,35 +390,66 @@ class PrivacyEvaluator:
         ]
         
         # Use all metrics if none specified
-        self.selected_metrics = selected_metrics if selected_metrics else self.available_metrics
+        self.selected_metrics = (
+            selected_metrics.copy() if selected_metrics else self.available_metrics.copy()
+        )
+        self.unavailable_metrics: Dict[str, str] = {}
         
         # Device management
         if device == 'auto':
-            if torch.cuda.is_available():
-                self.device = torch.device('cuda')
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                self.device = 'cuda'
                 self.logger.info("Using CUDA for acceleration")
             else:
-                self.device = torch.device('cpu')
-                self.logger.info("Using CPU")
+                self.device = 'cpu'
+                if not TORCH_AVAILABLE:
+                    self.logger.info("PyTorch not available — defaulting to CPU.")
+                else:
+                    self.logger.info("CUDA device not available — using CPU.")
         elif device == 'cuda':
-            if torch.cuda.is_available():
-                self.device = torch.device('cuda')
+            if TORCH_AVAILABLE and torch.cuda.is_available():
+                self.device = 'cuda'
                 self.logger.info("Using CUDA for acceleration")
             else:
-                self.logger.warning("CUDA requested but not available. Falling back to CPU.")
-                self.device = torch.device('cpu')
+                warn_reason = "PyTorch is not installed" if not TORCH_AVAILABLE else "CUDA device not available"
+                self.logger.warning(f"CUDA requested but unavailable ({warn_reason}). Falling back to CPU.")
+                self.device = 'cpu'
         else:  # cpu
-            self.device = torch.device('cpu')
+            self.device = 'cpu'
             self.logger.info("Using CPU")
         
-        # Initialize Flair NER model with caching
-        try:
-            self.logger.info("Loading Flair NER model (this may take a few minutes)...")
-            self.ner_tagger = get_flair_model()
-            self.logger.info("Loaded Flair NER model successfully")
-        except Exception as e:
-            self.logger.error(f"Failed to load Flair NER model: {str(e)}")
-            raise
+        # Handle optional text privacy dependency
+        skip_text_privacy = False
+        if 'text_privacy' in self.selected_metrics:
+            if not TORCH_AVAILABLE:
+                self.unavailable_metrics['text_privacy'] = "requires PyTorch to load Flair NER models"
+                skip_text_privacy = True
+            elif not FLAIR_AVAILABLE:
+                self.unavailable_metrics['text_privacy'] = (
+                    f"requires Flair; import failed with: {FLAIR_IMPORT_ERROR}"
+                )
+                skip_text_privacy = True
+        
+        # Initialize Flair NER model with caching when available
+        self.ner_tagger = None
+        if 'text_privacy' in self.selected_metrics and not skip_text_privacy:
+            try:
+                self.logger.info("Loading Flair NER model (this may take a few minutes)...")
+                self.ner_tagger = get_flair_model()
+                self.logger.info("Loaded Flair NER model successfully")
+            except Exception as e:
+                self.logger.error(f"Failed to load Flair NER model: {str(e)}")
+                self.unavailable_metrics['text_privacy'] = f"failed to load Flair model: {e}"
+                self.selected_metrics.remove('text_privacy')
+                self.ner_tagger = None
+        elif skip_text_privacy:
+            self.selected_metrics.remove('text_privacy')
+        
+        # Remove metrics that could not be prepared
+        if self.unavailable_metrics:
+            for metric in list(self.unavailable_metrics):
+                if metric in self.selected_metrics:
+                    self.selected_metrics.remove(metric)
         
         # Initialize spaCy for additional linguistic features
         self.nlp = None
@@ -480,6 +533,9 @@ class PrivacyEvaluator:
                     'error': f"Anonymeter evaluation failed: {str(e)}",
                     'risk_level': 'unknown'
                 }
+        
+        if self.unavailable_metrics:
+            results['skipped_metrics'] = self.unavailable_metrics
         
         self.logger.info("Privacy evaluation completed")
         return results
@@ -1103,8 +1159,12 @@ class PrivacyEvaluator:
         """
         Process a batch of texts to extract named entities using Flair.
         """
+        if self.ner_tagger is None:
+            self.logger.warning("Skipping entity processing because the Flair NER model is unavailable.")
+            return []
+        
         results = []
-        batch_size = 64 if self.device.type == 'cuda' else 16  # Larger batch for GPU
+        batch_size = 64 if self.device == 'cuda' else 16  # Larger batch for GPU
         
         # Ensure model is on the correct device (compatible with all Flair versions)
         self.ner_tagger = self.ner_tagger.to(self.device)
