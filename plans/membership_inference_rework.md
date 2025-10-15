@@ -4,7 +4,7 @@
    - Document the discrepancy between SynEval’s current classifier-based distinguishability metric and true model-centric membership inference.
    - Propose switching terminology (e.g., “distribution distinguishability”) or adding a separate, model-based privacy test.
 2. **Design improved evaluation**
-   - Add an optional workflow that trains a downstream model on real data, then applies a classical membership inference attack (confidence-based or loss-based) against held-out samples.
+   - Add an optional workflow that accepts a model checkpoint file, then applies a classical membership inference attack (confidence-based, loss-based, gradient-based) against held-out samples.
    - Retain the existing distinguishability score but clearly label it, emit guidance when high scores are actually evidence of safer (more private) synthetic data.
 3. **Implementation outline**
    - Refactor `_evaluate_membership_inference` to separate feature generation from attack logic.
