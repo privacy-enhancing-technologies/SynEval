@@ -1,0 +1,71 @@
+{
+  "columns": {
+    "age": {
+      "sdtype": "numerical"
+    },
+    "workclass": {
+      "sdtype": "categorical"
+    },
+    "fnlwgt": {
+      "sdtype": "numerical"
+    },
+    "education": {
+      "sdtype": "categorical"
+    },
+    "education.num": {
+      "sdtype": "numerical"
+    },
+    "marital.status": {
+      "sdtype": "categorical"
+    },
+    "occupation": {
+      "sdtype": "categorical"
+    },
+    "relationship": {
+      "sdtype": "categorical"
+    },
+    "race": {
+      "sdtype": "categorical"
+    },
+    "sex": {
+      "sdtype": "categorical"
+    },
+    "capital.gain": {
+      "sdtype": "numerical"
+    },
+    "capital.loss": {
+      "sdtype": "numerical"
+    },
+    "hours.per.week": {
+      "sdtype": "numerical"
+    },
+    "native.country": {
+      "sdtype": "categorical"
+    },
+    "income": {
+      "sdtype": "categorical",
+      "values": ["<=50K", ">50K"]
+    }
+  },
+  "text_columns": [],
+  "utility": {
+    "input_columns": [
+      "age",
+      "workclass",
+      "fnlwgt",
+      "education",
+      "education.num",
+      "marital.status",
+      "occupation",
+      "relationship",
+      "race",
+      "sex",
+      "capital.gain",
+      "capital.loss",
+      "hours.per.week",
+      "native.country"
+    ],
+    "output_columns": ["income"],
+    "task_type": "classification"
+  }
+}
