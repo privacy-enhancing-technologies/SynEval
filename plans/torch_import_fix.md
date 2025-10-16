@@ -26,3 +26,8 @@
 - Code changes implementing optional PyTorch handling.
 - Updated README and notebook instructions that reflect the correct repository and installation process.
 - Test results demonstrating both the PyTorch-free fallback and the standard test suite passing.
+
+## Implementation Summary
+- Wrapped `torch` and Flair imports in `try/except` blocks across `run.py`, `utility.py`, `diversity.py`, `fidelity.py`, and `privacy.py`, exposing `TORCH_AVAILABLE` flags so CPU-only environments do not fail at import time.
+- Added device selection fallbacks and ImportError-driven skips in `run.py` so individual evaluation dimensions are bypassed with clear messaging when GPU-only dependencies are missing.
+- Preserved existing GPU-accelerated code paths when `torch` is present by routing through the new availability checks instead of removing CUDA logic.
