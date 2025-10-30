@@ -12,7 +12,7 @@ SynEval is a comprehensive evaluation framework for assessing the quality of syn
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/SCU-TrustworthyAI/SynEval.git
+git clone https://github.com/privacy-enhancing-technologies/SynEval.git
 cd SynEval
 ```
 
