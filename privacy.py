@@ -1,3 +1,4 @@
+# privacy.py
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -7,7 +8,7 @@ import spacy
 from gensim.models import Word2Vec
 from sklearn.metrics.pairwise import cosine_distances
 import logging
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Any
 import re
 import unicodedata
 from nltk.tokenize import word_tokenize
@@ -209,8 +210,13 @@ def distance_to_closest_records(syn_df, train_df, feature_cols):
     返回：5%分位数、判定结果、详细说明
     """
     try:
-        X_syn = prepare_tabular_features(syn_df, feature_cols)
-        X_train = prepare_tabular_features(train_df, feature_cols)
+        combined = pd.concat(
+            [syn_df[feature_cols], train_df[feature_cols]], axis=0, ignore_index=True
+        )
+        combined_matrix = prepare_tabular_features(combined, feature_cols)
+
+        X_syn = combined_matrix[: len(syn_df)]
+        X_train = combined_matrix[len(syn_df) :]
 
         # Ensure we have valid data
         if X_syn.shape[1] == 0 or X_train.shape[1] == 0:
@@ -250,8 +256,13 @@ def nearest_neighbor_distance_ratio(syn_df, train_df, feature_cols):
     返回：5%分位数、判定结果、详细说明
     """
     try:
-        X_syn = prepare_tabular_features(syn_df, feature_cols)
-        X_train = prepare_tabular_features(train_df, feature_cols)
+        combined = pd.concat(
+            [syn_df[feature_cols], train_df[feature_cols]], axis=0, ignore_index=True
+        )
+        combined_matrix = prepare_tabular_features(combined, feature_cols)
+
+        X_syn = combined_matrix[: len(syn_df)]
+        X_train = combined_matrix[len(syn_df) :]
 
         # Ensure we have valid data
         if X_syn.shape[1] == 0 or X_train.shape[1] == 0:
@@ -796,18 +807,21 @@ class PrivacyEvaluator:
         orig_confidence = np.mean(original_pred)
 
         self.logger.info(
-            f"Membership inference results - AUC: {auc_score:.3f}, "
+            f"Synthetic/real distinguishability - AUC: {auc_score:.3f}, "
             f"Avg confidence (syn/orig): {syn_confidence:.3f}/{orig_confidence:.3f}"
         )
 
+        fidelity_score = max(0.0, 1.0 - auc_score)
+
         return {
-            "mia_auc_score": auc_score,
+            "distinguishability_auc": auc_score,
             "synthetic_confidence": syn_confidence,
             "original_confidence": orig_confidence,
-            "risk_level": "high" if auc_score > 0.7 else "low",
-            "explanation": "High risk: The model can easily distinguish between synthetic and real data. "
-            "This suggests the synthetic data is not preserving the statistical properties "
-            "of the real data well enough.",
+            "fidelity_score": fidelity_score,
+            "interpretation": (
+                "Values near 1.0 indicate synthetic data is easily separable from the original "
+                "distribution (poor fidelity). Values near 0.5 indicate high similarity."
+            ),
         }
 
     def _evaluate_tabular_privacy(self) -> Dict:
@@ -842,20 +856,25 @@ class PrivacyEvaluator:
                 "risk_level": "unknown",
             }
 
-        # Evaluate re-identification risks using Anonymeter
-        self.logger.info("Starting Anonymeter re-identification risk evaluation...")
-        try:
-            reid_risks = self._evaluate_reidentification_risks()
-            results["reidentification_risks"] = reid_risks
-            self.logger.info("Anonymeter re-identification risk evaluation completed")
-        except Exception as e:
-            self.logger.error(
-                f"Anonymeter re-identification risk evaluation failed: {str(e)}"
-            )
-            results["reidentification_risks"] = {
-                "error": f"Re-identification risk evaluation failed: {str(e)}",
-                "risk_level": "unknown",
-            }
+        # Evaluate re-identification risks using Anonymeter only when requested
+        if "anonymeter" in self.selected_metrics:
+            self.logger.info("Starting Anonymeter re-identification risk evaluation...")
+            try:
+                reid_risks = self._evaluate_reidentification_risks()
+                results["reidentification_risks"] = reid_risks
+                self.logger.info(
+                    "Anonymeter re-identification risk evaluation completed"
+                )
+            except Exception as e:
+                self.logger.error(
+                    f"Anonymeter re-identification risk evaluation failed: {str(e)}"
+                )
+                results["reidentification_risks"] = {
+                    "error": f"Re-identification risk evaluation failed: {str(e)}",
+                    "risk_level": "unknown",
+                }
+        else:
+            self.logger.info("Skipping Anonymeter evaluation (metric not selected)")
 
         return results
 

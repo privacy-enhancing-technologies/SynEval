@@ -5,7 +5,7 @@ import pandas as pd
 import json
 import numpy as np
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fidelity import FidelityEvaluator
 from utility import UtilityEvaluator
 from diversity import DiversityEvaluator
@@ -101,6 +101,8 @@ class SynEval:
         input_columns: List[str],
         output_columns: List[str],
         selected_metrics: List[str] = None,
+        real_train_data: Optional[pd.DataFrame] = None,
+        real_test_data: Optional[pd.DataFrame] = None,
     ) -> Dict:
         # Utility evaluator is created fresh each time since it needs input/output columns
         utility_evaluator = UtilityEvaluator(
@@ -111,6 +113,8 @@ class SynEval:
             output_columns=output_columns,
             selected_metrics=selected_metrics,
             device=self.device,
+            real_train_data=real_train_data,
+            real_test_data=real_test_data,
         )
         return utility_evaluator.evaluate()
 
@@ -690,24 +694,28 @@ def display_results_summary(results: Dict):
 
         elif dimension == "privacy":
             if "membership_inference" in dimension_results:
-                mia = dimension_results["membership_inference"]
-                print(f"Membership Inference Risk: {mia.get('risk_level', 'N/A')}")
+                distinguishability = dimension_results["membership_inference"]
+                auc_value = distinguishability.get("distinguishability_auc")
+                fidelity_score = distinguishability.get("fidelity_score")
 
-                # Safe formatting for MIA AUC Score
-                mia_auc = mia.get("mia_auc_score", None)
-                if isinstance(mia_auc, (int, float)):
-                    print(f"MIA AUC Score: {mia_auc:.3f}")
+                if isinstance(auc_value, (int, float)):
+                    print(
+                        f"Synthetic-Real Distinguishability AUC: {auc_value:.3f} "
+                        "(0.5 indicates high similarity, 1.0 indicates easily separable)"
+                    )
                 else:
-                    print(f"MIA AUC Score: {mia_auc if mia_auc is not None else 'N/A'}")
+                    print("Synthetic-Real Distinguishability AUC: N/A")
 
-                # Additional MIA metrics
-                syn_confidence = mia.get("synthetic_confidence", None)
-                orig_confidence = mia.get("original_confidence", None)
+                if isinstance(fidelity_score, (int, float)):
+                    print(f"AUC-Derived Fidelity Score (1-AUC): {fidelity_score:.3f}")
+
+                syn_confidence = distinguishability.get("synthetic_confidence", None)
+                orig_confidence = distinguishability.get("original_confidence", None)
                 if isinstance(syn_confidence, (int, float)) and isinstance(
                     orig_confidence, (int, float)
                 ):
-                    print(f"Synthetic Confidence: {syn_confidence:.3f}")
-                    print(f"Original Confidence: {orig_confidence:.3f}")
+                    print(f"Average Synthetic Score (classifier): {syn_confidence:.3f}")
+                    print(f"Average Real Score (classifier): {orig_confidence:.3f}")
 
             if "exact_matches" in dimension_results:
                 exact = dimension_results["exact_matches"]
