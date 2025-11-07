@@ -14,9 +14,13 @@ from typing import Any, Dict, List, Optional, Tuple
 
 try:
     import anonymeter
-    from anonymeter.evaluators import (InferenceEvaluator, LinkabilityEvaluator,
-                                       SinglingOutEvaluator)
+    from anonymeter.evaluators import (
+        InferenceEvaluator,
+        LinkabilityEvaluator,
+        SinglingOutEvaluator,
+    )
     from anonymeter.stats.confidence import EvaluationResults
+
     ANONYMETER_AVAILABLE = True
 except ImportError:
     anonymeter = None  # type: ignore

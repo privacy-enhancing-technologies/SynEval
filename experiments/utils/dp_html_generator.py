@@ -147,11 +147,9 @@ class DPHtmlGenerator:
 
         if self.in_group_gen is None:
             try:
-                from .in_group_dashboard_generator import \
-                    InGroupDashboardGenerator
+                from .in_group_dashboard_generator import InGroupDashboardGenerator
             except ImportError:
-                from in_group_dashboard_generator import \
-                    InGroupDashboardGenerator
+                from in_group_dashboard_generator import InGroupDashboardGenerator
             self.in_group_gen = InGroupDashboardGenerator()
 
         if output_file is None:
@@ -206,11 +204,11 @@ class DPHtmlGenerator:
         """
         if self.cross_group_gen is None:
             try:
-                from .cross_group_dashboard_generator import \
-                    CrossGroupDashboardGenerator
+                from .cross_group_dashboard_generator import (
+                    CrossGroupDashboardGenerator,
+                )
             except ImportError:
-                from cross_group_dashboard_generator import \
-                    CrossGroupDashboardGenerator
+                from cross_group_dashboard_generator import CrossGroupDashboardGenerator
             self.cross_group_gen = CrossGroupDashboardGenerator()
 
         if output_file is None:

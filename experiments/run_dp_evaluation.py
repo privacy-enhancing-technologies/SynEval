@@ -697,8 +697,9 @@ class DashboardDPEvaluationRunner:
         if not self.report_cfg.get("individual_reports", True):
             return
         try:
-            from experiments.utils.dp_html_generator import \
-                DPHtmlGenerator  # type: ignore
+            from experiments.utils.dp_html_generator import (
+                DPHtmlGenerator,
+            )  # type: ignore
 
             generator = DPHtmlGenerator(output_dir=exp_config.results_dir)
             output_path = generator.generate_individual_dashboard(
@@ -728,8 +729,9 @@ class DashboardDPEvaluationRunner:
         if not self.report_cfg.get("in_group_comparisons", True):
             return
         try:
-            from experiments.utils.dp_html_generator import \
-                DPHtmlGenerator  # type: ignore
+            from experiments.utils.dp_html_generator import (
+                DPHtmlGenerator,
+            )  # type: ignore
         except ImportError:
             try:
                 from dp_html_generator import DPHtmlGenerator  # type: ignore
@@ -764,8 +766,9 @@ class DashboardDPEvaluationRunner:
         if not self.report_cfg.get("cross_group_comparisons", True):
             return
         try:
-            from experiments.utils.dp_html_generator import \
-                DPHtmlGenerator  # type: ignore
+            from experiments.utils.dp_html_generator import (
+                DPHtmlGenerator,
+            )  # type: ignore
         except ImportError:
             try:
                 from dp_html_generator import DPHtmlGenerator  # type: ignore
@@ -959,8 +962,9 @@ class DashboardDPEvaluationRunner:
         )
         if mia_cfg.get("enabled", True):
             try:
-                from experiments.utils.membership_inference import \
-                    run_mia_for_experiment  # type: ignore
+                from experiments.utils.membership_inference import (
+                    run_mia_for_experiment,
+                )  # type: ignore
             except ImportError as exc:
                 logger.info("MIA module not available, skipping: %s", exc)
                 results["mia"] = {
