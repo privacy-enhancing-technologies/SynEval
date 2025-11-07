@@ -105,7 +105,6 @@ _model_lock = threading.Lock()
 
 def clear_model_cache():
     """Clear the global model cache to force fresh loading."""
-    global _model_cache
     with _model_lock:
         _model_cache.clear()
         print("Model cache cleared.")
