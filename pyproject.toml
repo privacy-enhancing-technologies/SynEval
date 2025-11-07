@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+requires = ["setuptools>=45", "wheel"]  # Removed setuptools_scm - using static version
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "syneval"
-dynamic = ["version"]
+version = "0.1.0"  # Static version instead of dynamic from setuptools_scm
 description = "A comprehensive evaluation framework for synthetic data quality assessment"
 readme = "README.md"
 license = {text = "MIT"}
@@ -71,8 +71,8 @@ Documentation = "https://github.com/yefyuan/SynEval#readme"
 Repository = "https://github.com/yefyuan/SynEval"
 "Bug Tracker" = "https://github.com/yefyuan/SynEval/issues"
 
-[tool.setuptools_scm]
-# Don't write version file - project doesn't have syneval package directory
+# [tool.setuptools_scm]
+# Removed - using static version instead
 # write_to = "syneval/_version.py"
 
 [tool.black]
