@@ -62,8 +62,8 @@ docs = [
     "sphinx-rtd-theme>=1.0",
 ]
 
-[project.scripts]
-syneval = "syneval.cli:main"
+# [project.scripts]
+# syneval = "syneval.cli:main"  # Commented out - no syneval package directory
 
 [project.urls]
 Homepage = "https://github.com/yefyuan/SynEval"
@@ -72,7 +72,8 @@ Repository = "https://github.com/yefyuan/SynEval"
 "Bug Tracker" = "https://github.com/yefyuan/SynEval/issues"
 
 [tool.setuptools_scm]
-write_to = "syneval/_version.py"
+# Don't write version file - project doesn't have syneval package directory
+# write_to = "syneval/_version.py"
 
 [tool.black]
 line-length = 88
