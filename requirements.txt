@@ -1,0 +1,23 @@
+#SynEval requirements
+pandas>=1.5.0
+numpy>=1.26.0
+scipy>=1.11.0
+sdv>=0.18.0
+textblob>=0.17.1
+scikit-learn>=1.0.0
+nltk>=3.8.1
+gensim>=4.3.1
+networkx>=3.1
+flair>=0.12.0
+matplotlib>=3.7.0
+spacy>=3.8.5
+tqdm>=4.65.0
+anonymeter>=0.1.0
+seaborn>=0.12.0
+certifi>=2023.7.22
+torch>=1.9.0,<2.2.0
+torchvision>=0.10.0,<0.17.0
+transformers>=4.20.0,<4.40.0
+pathlib2>=2.3.0
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl 
+

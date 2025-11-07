@@ -1,0 +1,31 @@
+# Include README and documentation
+include README.md
+include LICENSE
+include requirements.txt
+include requirements_flair_ner.txt
+
+# Include package data
+recursive-include syneval *.txt
+recursive-include syneval *.md
+recursive-include syneval *.json
+
+# Include examples and tests
+recursive-include examples *.py
+recursive-include examples *.csv
+recursive-include examples *.json
+recursive-include tests *.py
+
+# Exclude cache and build directories
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so
+global-exclude .DS_Store
+global-exclude .git*
+global-exclude .pytest_cache
+global-exclude .mypy_cache
+global-exclude build
+global-exclude dist
+global-exclude *.egg-info
+global-exclude cache
+global-exclude reports
+global-exclude privacy_visualizations 
