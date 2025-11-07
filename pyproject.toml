@@ -75,6 +75,11 @@ Repository = "https://github.com/yefyuan/SynEval"
 # Removed - using static version instead
 # write_to = "syneval/_version.py"
 
+[tool.setuptools]
+# Explicitly disable setuptools_scm to prevent automatic detection
+# This ensures we use the static version from [project] section
+use_scm_version = false
+
 [tool.black]
 line-length = 88
 target-version = ['py38']
