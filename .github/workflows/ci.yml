@@ -93,26 +93,28 @@ jobs:
         # Run mypy but don't fail CI on type errors (warnings only)
         mypy . --ignore-missing-imports --no-error-summary || true
 
-  build:
-    runs-on: ubuntu-latest
-    needs: [test, lint]
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.11  # Python 3.12 not supported due to anonymeter compatibility
-    
-    - name: Install build dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
-    
-    - name: Build package
-      run: |
-        python -m build
-    
-    - name: Check package
-      run: |
-        twine check dist/*
+  # Build job removed - project doesn't need to be packaged for distribution
+  # If you need to publish to PyPI in the future, uncomment this section
+  # build:
+  #   runs-on: ubuntu-latest
+  #   needs: [test, lint]
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   
+  #   - name: Set up Python
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: 3.11  # Python 3.12 not supported due to anonymeter compatibility
+  #   
+  #   - name: Install build dependencies
+  #     run: |
+  #       python -m pip install --upgrade pip
+  #       pip install build twine
+  #   
+  #   - name: Build package
+  #     run: |
+  #       python -m build
+  #   
+  #   - name: Check package
+  #     run: |
+  #       twine check dist/*
