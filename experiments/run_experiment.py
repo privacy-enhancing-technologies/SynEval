@@ -20,7 +20,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from typing import Optional
 
-from experiments.run_dp_evaluation import DashboardDPEvaluationRunner  # type: ignore
+from experiments.run_dp_evaluation import \
+    DashboardDPEvaluationRunner  # type: ignore
 
 logger = logging.getLogger(__name__)
 
