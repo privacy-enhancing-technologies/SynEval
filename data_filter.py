@@ -486,9 +486,9 @@ class SynEvalDataFilter:
                 # 句子长度
                 sentences = texts.str.split("[.!?]")
                 avg_sentence_length = sentences.apply(
-                    lambda x: np.mean([len(s.split()) for s in x if s.strip()])
-                    if x
-                    else 0
+                    lambda x: (
+                        np.mean([len(s.split()) for s in x if s.strip()]) if x else 0
+                    )
                 )
 
                 # 词汇复杂度

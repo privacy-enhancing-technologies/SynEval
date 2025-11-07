@@ -694,9 +694,9 @@ class IndividualDashboardGenerator:
             "metric_description": "ML task performance (TSTR)",
             "message": None,
             "task_type": tstr.get("task_type") if isinstance(tstr, dict) else None,
-            "training_size": tstr.get("training_size")
-            if isinstance(tstr, dict)
-            else None,
+            "training_size": (
+                tstr.get("training_size") if isinstance(tstr, dict) else None
+            ),
             "test_size": tstr.get("test_size") if isinstance(tstr, dict) else None,
         }
         if not tstr or not isinstance(tstr, dict):

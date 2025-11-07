@@ -695,9 +695,11 @@ class UtilityEvaluator:
                     logger.info(
                         "Utility metrics (classification) -> real accuracy %.4f, synthetic accuracy %.4f, "
                         "real F1 %.4f, synthetic F1 %.4f",
-                        real_acc
-                        if isinstance(real_acc, (int, float))
-                        else float("nan"),
+                        (
+                            real_acc
+                            if isinstance(real_acc, (int, float))
+                            else float("nan")
+                        ),
                         syn_acc if isinstance(syn_acc, (int, float)) else float("nan"),
                         real_f1 if isinstance(real_f1, (int, float)) else float("nan"),
                         syn_f1 if isinstance(syn_f1, (int, float)) else float("nan"),

@@ -574,11 +574,13 @@ class SynEvalPlotter:
                     ax4.bar(
                         ["Entropy Ratio"],
                         [ratio],
-                        color="green"
-                        if 0.8 <= ratio <= 1.2
-                        else "orange"
-                        if 0.6 <= ratio <= 1.4
-                        else "red",
+                        color=(
+                            "green"
+                            if 0.8 <= ratio <= 1.2
+                            else "orange"
+                            if 0.6 <= ratio <= 1.4
+                            else "red"
+                        ),
                     )
                     ax4.set_title("Entropy Ratio (Synthetic/Real)")
                     ax4.set_ylabel("Ratio")
@@ -725,11 +727,13 @@ class SynEvalPlotter:
                                     ax4.bar(
                                         ["Sentiment Alignment"],
                                         [alignment],
-                                        color="green"
-                                        if alignment > 0.7
-                                        else "orange"
-                                        if alignment > 0.5
-                                        else "red",
+                                        color=(
+                                            "green"
+                                            if alignment > 0.7
+                                            else "orange"
+                                            if alignment > 0.5
+                                            else "red"
+                                        ),
                                     )
                                     ax4.set_title("Sentiment Alignment Score")
                                     ax4.set_ylabel("Score")
