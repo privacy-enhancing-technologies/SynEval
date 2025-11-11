@@ -6,14 +6,14 @@ on:
       - 'v*'
 
 jobs:
-  build:
+  build-and-package:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ['3.10', '3.11']
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
@@ -22,26 +22,26 @@ jobs:
 
       - name: Install dependencies
         run: |
-          bash scripts/set_environment.sh
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Build
-        run: |
-          bash build.sh
+      - name: Package application for release
+        run: zip -r SynEval.zip . -x ".git/*" ".github/*"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4 # <-- UPDATED FROM v3
+        uses: actions/upload-artifact@v4
         with:
-          name: SynEval-artifact
+          name: SynEval-artifact-${{ matrix.python-version }}
           path: ./SynEval.zip
 
   release:
     runs-on: ubuntu-latest
-    needs: build
+    needs: build-and-package
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4 # <-- UPDATED FROM v3
+      - name: Download artifact (from Python 3.11 build)
+        uses: actions/download-artifact@v4
         with:
-          name: SynEval-artifact
+          name: SynEval-artifact-3.11
 
       - name: Create Release
         id: create_release
@@ -52,7 +52,7 @@ jobs:
           tag_name: ${{ github.ref }}
           release_name: Release ${{ github.ref }}
           body: |
-            Changes in this release
+            Automated release of SynEval.
           draft: false
           prerelease: false
 
