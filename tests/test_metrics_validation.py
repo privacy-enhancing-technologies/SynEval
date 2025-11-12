@@ -13,9 +13,7 @@ import pytest
 # Add parent directory to path to import modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from diversity import DiversityEvaluator
-from fidelity import FidelityEvaluator
-from utility import UtilityEvaluator
+from evaluation import DiversityEvaluator, FidelityEvaluator, UtilityEvaluator
 
 
 class TestMetricsValidation:

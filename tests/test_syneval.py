@@ -12,9 +12,7 @@ import pytest
 # Add parent directory to path to import modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from diversity import DiversityEvaluator
-from fidelity import FidelityEvaluator
-from utility import UtilityEvaluator
+from evaluation import DiversityEvaluator, FidelityEvaluator, UtilityEvaluator
 
 
 class TestSynEvalFramework:
@@ -374,21 +372,21 @@ class TestSynEvalFramework:
     def test_module_imports(self):
         """Test that all modules can be imported successfully"""
         try:
-            from fidelity import FidelityEvaluator
+            from evaluation import FidelityEvaluator
 
             print("✅ FidelityEvaluator import successful")
         except ImportError as e:
             pytest.fail(f"Failed to import FidelityEvaluator: {e}")
 
         try:
-            from utility import UtilityEvaluator
+            from evaluation import UtilityEvaluator
 
             print("✅ UtilityEvaluator import successful")
         except ImportError as e:
             pytest.fail(f"Failed to import UtilityEvaluator: {e}")
 
         try:
-            from diversity import DiversityEvaluator
+            from evaluation import DiversityEvaluator
 
             print("✅ DiversityEvaluator import successful")
         except ImportError as e:
