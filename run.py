@@ -3,16 +3,26 @@
 import argparse
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
-from diversity import DiversityEvaluator
-from fidelity import FidelityEvaluator
-from privacy import PrivacyEvaluator
-from utility import UtilityEvaluator
+from artifacts.utils.html_report import EvaluationHTMLGenerator
+from evaluation import (DiversityEvaluator, FidelityEvaluator,
+                        PrivacyEvaluator, UtilityEvaluator)
+
+ARTIFACTS_DIR = Path("artifacts")
+CACHE_DIR = ARTIFACTS_DIR / "cache"
+PLOTS_DIR = ARTIFACTS_DIR / "plots"
+HTML_DIR = ARTIFACTS_DIR / "html"
+REPORTS_DIR = ARTIFACTS_DIR / "reports"
+
+for path in [ARTIFACTS_DIR, CACHE_DIR, PLOTS_DIR, HTML_DIR, REPORTS_DIR]:
+    path.mkdir(parents=True, exist_ok=True)
 
 try:
     import torch  # type: ignore
@@ -286,7 +296,7 @@ def parse_args():
 
     parser.add_argument(
         "--output",
-        default="./evaluation_results.json",
+        default=str(REPORTS_DIR / "evaluation_results.json"),
         help="Path to save evaluation results",
     )
     parser.add_argument(
@@ -298,7 +308,17 @@ def parse_args():
     parser.add_argument(
         "--plot",
         action="store_true",
-        help="Generate plots for all evaluation metrics and save them to the ./plots directory",
+        help=f"Generate plots for all evaluation metrics and save them to the {PLOTS_DIR} directory",
+    )
+    parser.add_argument(
+        "--html",
+        action="store_true",
+        help="Generate an HTML dashboard summarizing evaluation results",
+    )
+    parser.add_argument(
+        "--html-output",
+        default=str(HTML_DIR / "syneval_dashboard.html"),
+        help="Path to save the HTML dashboard when --html is enabled",
     )
 
     # Device selection arguments
@@ -358,6 +378,8 @@ def main():
     if args.dimension:
         dimensions = args.dimension
 
+    dimensions = list(dimensions)
+
     # Validate utility args if requested
     if "utility" in dimensions:
         if not args.utility_input or not args.utility_output:
@@ -369,77 +391,110 @@ def main():
     device = configure_device(args.device, args.force_cpu, args.gpu_memory_fraction)
     logger.info(f"Configured device: {device}")
 
-    # Run evaluation
+    # Run evaluation with progress bar
     evaluator = SynEval(synthetic_data, original_data, metadata, device)
     results = {}
 
-    if "fidelity" in dimensions:
-        logger.info("Running fidelity evaluation...")
-        try:
-            results["fidelity"] = evaluator.evaluate_fidelity(
-                selected_metrics=args.fidelity_metrics
-            )
-            logger.info("Fidelity evaluation completed successfully")
-        except ImportError as e:
-            logger.warning(f"Skipping fidelity evaluation: {e}")
-            results["fidelity"] = {"skipped": True, "reason": str(e)}
-        except Exception as e:
-            logger.error(f"Error in fidelity evaluation: {str(e)}")
-            results["fidelity"] = {"error": str(e)}
+    progress = tqdm(
+        total=len(dimensions),
+        desc="Running evaluations",
+        unit="dimension",
+        dynamic_ncols=True,
+    )
 
-    if "utility" in dimensions:
-        logger.info("Running utility evaluation...")
-        try:
-            results["utility"] = evaluator.evaluate_utility(
-                input_columns=args.utility_input,
-                output_columns=args.utility_output,
-                selected_metrics=args.utility_metrics,
-            )
-            logger.info("Utility evaluation completed successfully")
-        except ImportError as e:
-            logger.warning(f"Skipping utility evaluation: {e}")
-            results["utility"] = {"skipped": True, "reason": str(e)}
-        except Exception as e:
-            logger.error(f"Error in utility evaluation: {str(e)}")
-            results["utility"] = {"error": str(e)}
+    for dimension in dimensions:
+        progress.set_postfix_str(dimension)
 
-    if "diversity" in dimensions:
-        logger.info("Running diversity evaluation...")
-        try:
-            results["diversity"] = evaluator.evaluate_diversity(
-                selected_metrics=args.diversity_metrics
-            )
-            logger.info("Diversity evaluation completed successfully")
-        except ImportError as e:
-            logger.warning(f"Skipping diversity evaluation: {e}")
-            results["diversity"] = {"skipped": True, "reason": str(e)}
-        except Exception as e:
-            logger.error(f"Error in diversity evaluation: {str(e)}")
-            results["diversity"] = {
-                "error": str(e),
-                "tabular_diversity": {},
-                "text_diversity": {},
-            }
+        if dimension == "fidelity":
+            logger.info("Running fidelity evaluation...")
+            try:
+                results["fidelity"] = evaluator.evaluate_fidelity(
+                    selected_metrics=args.fidelity_metrics
+                )
+                logger.info("Fidelity evaluation completed successfully")
+            except ImportError as e:
+                logger.warning(f"Skipping fidelity evaluation: {e}")
+                results["fidelity"] = {"skipped": True, "reason": str(e)}
+            except Exception as e:
+                logger.error(f"Error in fidelity evaluation: {str(e)}")
+                results["fidelity"] = {"error": str(e)}
 
-    if "privacy" in dimensions:
-        logger.info("Running privacy evaluation...")
-        try:
-            results["privacy"] = evaluator.evaluate_privacy(
-                selected_metrics=args.privacy_metrics
-            )
-            logger.info("Privacy evaluation completed successfully")
-        except ImportError as e:
-            logger.warning(f"Skipping privacy evaluation: {e}")
-            results["privacy"] = {"skipped": True, "reason": str(e)}
-        except Exception as e:
-            logger.error(f"Error in privacy evaluation: {str(e)}")
-            results["privacy"] = {
-                "error": str(e),
-                "membership_inference": {},
-                "exact_matches": {},
-            }
+        elif dimension == "utility":
+            logger.info("Running utility evaluation...")
+            try:
+                results["utility"] = evaluator.evaluate_utility(
+                    input_columns=args.utility_input,
+                    output_columns=args.utility_output,
+                    selected_metrics=args.utility_metrics,
+                )
+                logger.info("Utility evaluation completed successfully")
+            except ImportError as e:
+                logger.warning(f"Skipping utility evaluation: {e}")
+                results["utility"] = {"skipped": True, "reason": str(e)}
+            except Exception as e:
+                logger.error(f"Error in utility evaluation: {str(e)}")
+                results["utility"] = {"error": str(e)}
 
-    if args.correlation:
+        elif dimension == "diversity":
+            logger.info("Running diversity evaluation...")
+            try:
+                results["diversity"] = evaluator.evaluate_diversity(
+                    selected_metrics=args.diversity_metrics
+                )
+                logger.info("Diversity evaluation completed successfully")
+            except ImportError as e:
+                logger.warning(f"Skipping diversity evaluation: {e}")
+                results["diversity"] = {"skipped": True, "reason": str(e)}
+            except Exception as e:
+                logger.error(f"Error in diversity evaluation: {str(e)}")
+                results["diversity"] = {
+                    "error": str(e),
+                    "tabular_diversity": {},
+                    "text_diversity": {},
+                }
+
+        elif dimension == "privacy":
+            logger.info("Running privacy evaluation...")
+            try:
+                results["privacy"] = evaluator.evaluate_privacy(
+                    selected_metrics=args.privacy_metrics
+                )
+                logger.info("Privacy evaluation completed successfully")
+            except ImportError as e:
+                logger.warning(f"Skipping privacy evaluation: {e}")
+                results["privacy"] = {"skipped": True, "reason": str(e)}
+            except Exception as e:
+                logger.error(f"Error in privacy evaluation: {str(e)}")
+                results["privacy"] = {
+                    "error": str(e),
+                    "membership_inference": {},
+                    "exact_matches": {},
+                }
+
+        elif dimension == "correlation":
+            if not args.correlation:
+                logger.warning(
+                    "Correlation dimension requested but no metrics were supplied via --correlation. Skipping."
+                )
+            else:
+                logger.info(f"Running correlation evaluation: {args.correlation}")
+                correlation_kwargs = dict(
+                    text_col=args.correlation_text_col,
+                    rating_col=args.correlation_rating_col,
+                    category_col=args.correlation_category_col,
+                    numeric_col=args.correlation_numeric_col,
+                    pii_col=args.correlation_pii_col,
+                    top_n=args.correlation_top_n,
+                )
+                results["correlation"] = evaluator.evaluate_correlation(
+                    args.correlation, **correlation_kwargs
+                )
+
+        progress.update(1)
+
+    progress.close()
+
+    if args.correlation and "correlation" not in dimensions:
         logger.info(f"Running correlation evaluation: {args.correlation}")
         correlation_kwargs = dict(
             text_col=args.correlation_text_col,
@@ -449,7 +504,7 @@ def main():
             pii_col=args.correlation_pii_col,
             top_n=args.correlation_top_n,
         )
-        # semantic_tabular 需要 text_embeddings，暂留接口
+        # semantic_tabular requires text_embeddings, interface reserved for future use
         results["correlation"] = evaluator.evaluate_correlation(
             args.correlation, **correlation_kwargs
         )
@@ -466,6 +521,7 @@ def main():
     logger.info(f"Saving results to {args.output}")
     try:
         safe_results = safe_json(results)
+        Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         with open(args.output, "w") as f:
             json.dump(safe_results, f, indent=2)
         logger.info(f"Results successfully saved to {args.output}")
@@ -489,15 +545,43 @@ def main():
     if getattr(args, "plot", False):
         logger.info("Generating plots for evaluation results...")
         try:
-            from plotting import SynEvalPlotter
+            from artifacts.utils.plotting import SynEvalPlotter
 
-            plotter = SynEvalPlotter(output_dir="./plots")
+            plotter = SynEvalPlotter(output_dir=str(PLOTS_DIR))
             plotter.plot_all_results(results, save_plots=True)
-            logger.info("Plots saved to ./plots directory.")
+            logger.info(f"Plots saved to {PLOTS_DIR} directory.")
         except ImportError as e:
             logger.warning(f"Plotting module not available: {str(e)}")
         except Exception as e:
             logger.error(f"Error generating plots: {str(e)}")
+
+    if getattr(args, "html", False):
+        logger.info("Generating HTML dashboard for evaluation results...")
+        try:
+            command_line = " ".join(sys.argv)
+            context = {
+                "synthetic_path": args.synthetic,
+                "original_path": args.original,
+                "metadata_path": args.metadata,
+                "dimensions": dimensions,
+            }
+            generator = EvaluationHTMLGenerator(output_path=args.html_output)
+            dashboard_path = generator.generate(
+                results,
+                command=command_line,
+                context=context,
+            )
+            logger.info(f"Dashboard saved to {dashboard_path}")
+            try:
+                import webbrowser
+
+                webbrowser.open(dashboard_path.resolve().as_uri(), new=2)
+            except Exception as open_error:
+                logger.warning(f"Unable to open dashboard automatically: {open_error}")
+        except ImportError as import_error:
+            logger.warning(f"HTML report generator unavailable: {import_error}")
+        except Exception as gen_error:
+            logger.error(f"Failed to generate HTML dashboard: {gen_error}")
 
     logger.info("Evaluation complete!")
     return results

@@ -1,0 +1,1027 @@
+{
+  "fidelity": {
+    "diagnostic": {
+      "Data Validity": 0.4318,
+      "Data Structure": 1.0,
+      "Overall": {
+        "score": 0.7159
+      }
+    },
+    "quality": {
+      "Column Shapes": 0.2478,
+      "Column Pair Trends": 0.0596,
+      "Overall": {
+        "score": 0.1537
+      }
+    },
+    "text": {
+      "title": {
+        "length_stats": {
+          "original_mean": 20.537607521504302,
+          "original_std": 16.315550714448047,
+          "synthetic_mean": 21.505901180236048,
+          "synthetic_std": 6.85833990342458
+        },
+        "word_count_stats": {
+          "original_mean": 3.836867373474695,
+          "original_std": 3.1608053207523605,
+          "synthetic_mean": 3.9831966393278657,
+          "synthetic_std": 1.362745326900263
+        },
+        "keyword_analysis": {
+          "original_top_keywords": {
+            "stars": 0.1496479276594322,
+            "great": 0.07679880526070956,
+            "love": 0.04997503853040659,
+            "nice": 0.04398707939004596,
+            "good": 0.03971121625330547,
+            "cute": 0.03761142614736404,
+            "quality": 0.029783206232524888,
+            "perfect": 0.02779950274021467,
+            "fit": 0.027007436740152695,
+            "small": 0.02648641973464678
+          },
+          "synthetic_top_keywords": {
+            "good": 0.06616114086911877,
+            "perfect": 0.06574662372677631,
+            "price": 0.05218341308204015,
+            "great": 0.04927528958180557,
+            "love": 0.04456936864698441,
+            "pretty": 0.035822403746777844,
+            "cute": 0.02993617171524959,
+            "quality": 0.026851684210541488,
+            "fit": 0.013673930465100797,
+            "small": 0.01297931364812756
+          }
+        },
+        "sentiment_analysis": {
+          "original_mean": 0.27435424428333716,
+          "original_std": 0.3918429251040446,
+          "synthetic_mean": 0.23636847291944169,
+          "synthetic_std": 0.41014343778905316,
+          "original_sentiment_distribution": {
+            "negative": 8.15,
+            "neutral": 40.28,
+            "positive": 51.57000000000001
+          },
+          "synthetic_sentiment_distribution": {
+            "negative": 14.790000000000001,
+            "neutral": 28.27,
+            "positive": 56.940000000000005
+          }
+        }
+      },
+      "text": {
+        "length_stats": {
+          "original_mean": 142.25300120048018,
+          "original_std": 180.0758183826454,
+          "synthetic_mean": 129.19375812743823,
+          "synthetic_std": 42.29214134018719
+        },
+        "word_count_stats": {
+          "original_mean": 27.046918767507,
+          "original_std": 34.16608494091617,
+          "synthetic_mean": 24.034310293087927,
+          "synthetic_std": 8.043133714972656
+        },
+        "keyword_analysis": {
+          "original_top_keywords": {
+            "love": 0.09946021040153563,
+            "great": 0.09902599307291378,
+            "like": 0.07721838739442971,
+            "fit": 0.07204000251147712,
+            "good": 0.06515947822339414,
+            "nice": 0.06413060449328375,
+            "size": 0.05938139155469766,
+            "quality": 0.0585772715395417,
+            "just": 0.054632194631783516,
+            "cute": 0.05412467041639474
+          },
+          "synthetic_top_keywords": {
+            "just": 0.12139243463829413,
+            "like": 0.08029283076705201,
+            "little": 0.057546366106890755,
+            "really": 0.05469340514333469,
+            "great": 0.04882575030785009,
+            "good": 0.04827385934778178,
+            "nice": 0.04707823329456904,
+            "quality": 0.042867305451380115,
+            "cute": 0.04201532812063696,
+            "material": 0.037478533697009556
+          }
+        },
+        "sentiment_analysis": {
+          "original_mean": 0.29970990322389923,
+          "original_std": 0.31867502149706944,
+          "synthetic_mean": 0.19402553280714796,
+          "synthetic_std": 0.23728858005823503,
+          "original_sentiment_distribution": {
+            "negative": 7.41,
+            "neutral": 21.07,
+            "positive": 71.52
+          },
+          "synthetic_sentiment_distribution": {
+            "negative": 10.040000000000001,
+            "neutral": 22.85,
+            "positive": 67.11
+          }
+        }
+      }
+    },
+    "numerical_statistics": {
+      "helpful_vote": {
+        "original_statistics": {
+          "count": 10000,
+          "mean": 0.5696,
+          "median": 0.0,
+          "std": 2.952393520984334,
+          "min": "0",
+          "max": "123",
+          "q25": 0.0,
+          "q75": 0.0,
+          "skewness": 20.666921567054903,
+          "kurtosis": 653.6304789259212
+        },
+        "synthetic_statistics": {
+          "count": 10000,
+          "mean": 2.5294,
+          "median": 3.0,
+          "std": 1.7068177883700033,
+          "min": "0",
+          "max": "5",
+          "q25": 1.0,
+          "q75": 4.0,
+          "skewness": -0.026976507813185252,
+          "kurtosis": -1.272667200430608
+        },
+        "relative_differences": {
+          "mean_diff": 3.4406601123595504,
+          "median_diff": 3.0,
+          "std_diff": 0.4218867585778515,
+          "skewness_diff": 20.693898074868088,
+          "kurtosis_diff": 654.9031461263519
+        },
+        "range_coverage": 0.04065040650406504,
+        "distribution_similarity": {
+          "kl_divergence": 1.7988107776877185,
+          "histogram_similarity": 0.164699999980965
+        },
+        "overall_fidelity_score": 0.1566927295814357,
+        "fidelity_interpretation": "Very poor fidelity - synthetic data does not preserve original data characteristics"
+      }
+    }
+  },
+  "utility": {
+    "tstr_accuracy": {
+      "task_type": "classification",
+      "input_columns": [
+        "text"
+      ],
+      "output_columns": [
+        "rating"
+      ],
+      "training_size": 8000,
+      "test_size": 2000,
+      "total_samples": 10000,
+      "real_data_model": {
+        "0": {
+          "precision": 0.5365853658536586,
+          "recall": 0.47413793103448276,
+          "f1-score": 0.5034324942791762,
+          "support": 232.0
+        },
+        "1": {
+          "precision": 0.45454545454545453,
+          "recall": 0.06896551724137931,
+          "f1-score": 0.11976047904191617,
+          "support": 145.0
+        },
+        "2": {
+          "precision": 0.43283582089552236,
+          "recall": 0.14720812182741116,
+          "f1-score": 0.2196969696969697,
+          "support": 197.0
+        },
+        "3": {
+          "precision": 0.34782608695652173,
+          "recall": 0.05673758865248227,
+          "f1-score": 0.0975609756097561,
+          "support": 282.0
+        },
+        "4": {
+          "precision": 0.672289156626506,
+          "recall": 0.9755244755244755,
+          "f1-score": 0.7960057061340942,
+          "support": 1144.0
+        },
+        "accuracy": 0.6405,
+        "macro avg": {
+          "precision": 0.48881637697553265,
+          "recall": 0.3445147268560462,
+          "f1-score": 0.34729132495238246,
+          "support": 2000.0
+        },
+        "weighted avg": {
+          "precision": 0.5714256521030098,
+          "recall": 0.6405,
+          "f1-score": 0.5577923170517524,
+          "support": 2000.0
+        }
+      },
+      "synthetic_data_model": {
+        "0": {
+          "precision": 0.5192307692307693,
+          "recall": 0.11637931034482758,
+          "f1-score": 0.19014084507042253,
+          "support": 232.0
+        },
+        "1": {
+          "precision": 0.19101123595505617,
+          "recall": 0.11724137931034483,
+          "f1-score": 0.1452991452991453,
+          "support": 145.0
+        },
+        "2": {
+          "precision": 0.19230769230769232,
+          "recall": 0.10152284263959391,
+          "f1-score": 0.132890365448505,
+          "support": 197.0
+        },
+        "3": {
+          "precision": 0.24623115577889448,
+          "recall": 0.3475177304964539,
+          "f1-score": 0.28823529411764703,
+          "support": 282.0
+        },
+        "4": {
+          "precision": 0.6543846720707442,
+          "recall": 0.7762237762237763,
+          "f1-score": 0.7101159536185526,
+          "support": 1144.0
+        },
+        "accuracy": 0.525,
+        "macro avg": {
+          "precision": 0.3606331050686313,
+          "recall": 0.2917770078029993,
+          "f1-score": 0.29333632071085447,
+          "support": 2000.0
+        },
+        "weighted avg": {
+          "precision": 0.5020480169191083,
+          "recall": 0.525,
+          "f1-score": 0.4925077289994351,
+          "support": 2000.0
+        }
+      }
+    },
+    "correlation_analysis": {
+      "note": "Correlation analysis requires specific correlation types to be specified"
+    }
+  },
+  "diversity": {
+    "tabular_diversity": {
+      "coverage": {
+        "rating": 100.0,
+        "asin": 0.0,
+        "parent_asin": 0.0,
+        "user_id": 0.0,
+        "helpful_vote": 4.0650406504065035
+      },
+      "uniqueness": {
+        "synthetic_duplicate_ratio": 0.0,
+        "original_duplicate_ratio": 0.0,
+        "relative_duplication": 0
+      },
+      "numerical_metrics": {
+        "helpful_vote": {
+          "statistical_differences": {
+            "mean_diff": 3.440660111755502,
+            "std_diff": 0.4218867585635619,
+            "skew_diff": 20.693898074868088,
+            "kurtosis_diff": 654.9031461263519
+          },
+          "range_coverage": 4.0650406504065035,
+          "quartile_coverage": {
+            "q1": -999999999900.0,
+            "q2": -2999999999900.0,
+            "q3": -3999999999900.0
+          },
+          "distribution_similarity": {
+            "kl_divergence": 2.3140490020135758,
+            "similarity_score": 9.886015512033419
+          },
+          "real_statistics": {
+            "mean": 0.5696,
+            "std": 2.952393520984334,
+            "skew": 20.666921567054903,
+            "kurtosis": 653.6304789259212,
+            "min": "0",
+            "max": "123"
+          },
+          "synthetic_statistics": {
+            "mean": 2.5294,
+            "std": 1.7068177883700033,
+            "skew": -0.026976507813185252,
+            "kurtosis": -1.272667200430608,
+            "min": "0",
+            "max": "5"
+          }
+        }
+      },
+      "categorical_metrics": {
+        "rating": {
+          "category_coverage": 100.0,
+          "distribution_similarity": 79.63,
+          "entropy": {
+            "real": 1.8216277273008246,
+            "synthetic": 2.152537483825367,
+            "difference": 0.33090975652454246
+          },
+          "top_categories_coverage": 100.0,
+          "rare_categories_coverage": 0,
+          "category_counts": {
+            "real": 5,
+            "synthetic": 5,
+            "common": 5
+          }
+        },
+        "asin": {
+          "category_coverage": 0.0,
+          "distribution_similarity": 1.0125233984581428e-11,
+          "entropy": {
+            "real": 13.186425038456958,
+            "synthetic": 13.28771237954811,
+            "difference": 0.101287341091151
+          },
+          "top_categories_coverage": 0.0,
+          "rare_categories_coverage": 0.0,
+          "category_counts": {
+            "real": 9584,
+            "synthetic": 10000,
+            "common": 0
+          }
+        },
+        "parent_asin": {
+          "category_coverage": 0.0,
+          "distribution_similarity": 1.006972283335017e-11,
+          "entropy": {
+            "real": 13.091890554997393,
+            "synthetic": 13.28771237954811,
+            "difference": 0.19582182455071617
+          },
+          "top_categories_coverage": 0.0,
+          "rare_categories_coverage": 0.0,
+          "category_counts": {
+            "real": 9294,
+            "synthetic": 10000,
+            "common": 0
+          }
+        },
+        "user_id": {
+          "category_coverage": 0.0,
+          "distribution_similarity": 2.3925306180672123e-11,
+          "entropy": {
+            "real": 13.282712379548112,
+            "synthetic": 13.286768022825866,
+            "difference": 0.004055643277753873
+          },
+          "top_categories_coverage": 0.0,
+          "rare_categories_coverage": 0.0,
+          "category_counts": {
+            "real": 9977,
+            "synthetic": 9995,
+            "common": 0
+          }
+        }
+      },
+      "entropy_metrics": {
+        "column_entropy": {
+          "rating": {
+            "real": 1.8216277273008246,
+            "synthetic": 2.152537483825367,
+            "entropy_ratio": 1.1816560823306628,
+            "entropy_difference": 0.33090975652454246
+          },
+          "asin": {
+            "real": 13.186425038458244,
+            "synthetic": 13.287712379549445,
+            "entropy_ratio": 1.0076811827841912,
+            "entropy_difference": 0.10128734109120074
+          },
+          "parent_asin": {
+            "real": 13.091890554998662,
+            "synthetic": 13.287712379549445,
+            "entropy_ratio": 1.0149574901826934,
+            "entropy_difference": 0.19582182455078367
+          },
+          "user_id": {
+            "real": 13.282712379549444,
+            "synthetic": 13.2867680228234,
+            "entropy_ratio": 1.0003053324545497,
+            "entropy_difference": 0.004055643273956022
+          },
+          "helpful_vote": {
+            "real": 0.40046281183953103,
+            "synthetic": 2.584463817987566,
+            "entropy_ratio": 6.453692430192031,
+            "entropy_difference": 2.1840010061480353
+          }
+        },
+        "dataset_entropy": {
+          "real": 8.356623702429342,
+          "synthetic": 8.919838816747045,
+          "entropy_ratio": 1.0673974483315831
+        }
+      }
+    },
+    "text_diversity": {
+      "synthetic": {
+        "title": {
+          "lexical_diversity": {
+            "1-gram": {
+              "total": 24008,
+              "unique": 962,
+              "unique_ratio": 0.04006997667444185,
+              "entropy": 7.754978374266398,
+              "normalized_entropy": 0.782549146465277
+            },
+            "2-gram": {
+              "total": 14027,
+              "unique": 3218,
+              "unique_ratio": 0.22941470022100235,
+              "entropy": 10.039392213934892,
+              "normalized_entropy": 0.8616062900153459
+            },
+            "3-gram": {
+              "total": 5536,
+              "unique": 2732,
+              "unique_ratio": 0.4934971098265896,
+              "entropy": 10.58571776912522,
+              "normalized_entropy": 0.9272912776048896
+            },
+            "4-gram": {
+              "total": 1242,
+              "unique": 931,
+              "unique_ratio": 0.749597423510467,
+              "entropy": 9.576707587156015,
+              "normalized_entropy": 0.9710087920667954
+            },
+            "5-gram": {
+              "total": 129,
+              "unique": 114,
+              "unique_ratio": 0.8837209302325582,
+              "entropy": 6.763165239919362,
+              "normalized_entropy": 0.9897957124875655
+            },
+            "sample_size": 9981
+          },
+          "semantic_diversity": {
+            "total_mst_weight": 30.750511944293976,
+            "average_edge_weight": 0.003081213621672743,
+            "distinct_nodes": 3222,
+            "distinct_ratio": 0.32281334535617673,
+            "sample_size": 9981,
+            "device_used": "cpu"
+          },
+          "sentiment_diversity": {
+            "sentiment_by_rating": {
+              "1.0": 0.2833333333333333,
+              "2.0": 0.5746606334841629,
+              "3.0": 0.3322281167108753,
+              "4.0": 0.9319757365684576,
+              "5.0": 0.9627215849843587
+            },
+            "ideal_sentiment": {
+              "1.0": 0.0,
+              "2.0": 0.25,
+              "3.0": 0.5,
+              "4.0": 0.75,
+              "5.0": 1.0
+            },
+            "sentiment_alignment_score": 0.8009959996618561,
+            "sample_size": 9998
+          }
+        },
+        "text": {
+          "lexical_diversity": {
+            "1-gram": {
+              "total": 127141,
+              "unique": 3725,
+              "unique_ratio": 0.029298180759943684,
+              "entropy": 9.359700456879546,
+              "normalized_entropy": 0.7889809458799186
+            },
+            "2-gram": {
+              "total": 117144,
+              "unique": 45190,
+              "unique_ratio": 0.38576452912654513,
+              "entropy": 14.133683931514923,
+              "normalized_entropy": 0.9139901424405332
+            },
+            "3-gram": {
+              "total": 107392,
+              "unique": 78758,
+              "unique_ratio": 0.7333693384982122,
+              "entropy": 15.821143314299613,
+              "normalized_entropy": 0.9727026283170699
+            },
+            "4-gram": {
+              "total": 97736,
+              "unique": 88248,
+              "unique_ratio": 0.9029221576491774,
+              "entropy": 16.312716911390844,
+              "normalized_entropy": 0.9929054055209895
+            },
+            "5-gram": {
+              "total": 88152,
+              "unique": 85261,
+              "unique_ratio": 0.9672043742626373,
+              "entropy": 16.3468767455881,
+              "normalized_entropy": 0.9980022947097278
+            },
+            "sample_size": 9997
+          },
+          "semantic_diversity": {
+            "total_mst_weight": 101.28258216381073,
+            "average_edge_weight": 0.010133324878820483,
+            "distinct_nodes": 9787,
+            "distinct_ratio": 0.9790916366546618,
+            "sample_size": 9996,
+            "device_used": "cpu"
+          },
+          "sentiment_diversity": {
+            "sentiment_by_rating": {
+              "1.0": 0.033366045142296366,
+              "2.0": 0.0649056603773585,
+              "3.0": 0.20954907161803712,
+              "4.0": 0.7029016890428758,
+              "5.0": 0.8000521376433786
+            },
+            "ideal_sentiment": {
+              "1.0": 0.0,
+              "2.0": 0.25,
+              "3.0": 0.5,
+              "4.0": 0.75,
+              "5.0": 1.0
+            },
+            "sentiment_alignment_score": 0.8488085027078707,
+            "sample_size": 9997
+          }
+        }
+      },
+      "real": {
+        "title": {
+          "lexical_diversity": {
+            "1-gram": {
+              "total": 24008,
+              "unique": 962,
+              "unique_ratio": 0.04006997667444185,
+              "entropy": 7.754978374266398,
+              "normalized_entropy": 0.782549146465277
+            },
+            "2-gram": {
+              "total": 14027,
+              "unique": 3218,
+              "unique_ratio": 0.22941470022100235,
+              "entropy": 10.039392213934892,
+              "normalized_entropy": 0.8616062900153459
+            },
+            "3-gram": {
+              "total": 5536,
+              "unique": 2732,
+              "unique_ratio": 0.4934971098265896,
+              "entropy": 10.58571776912522,
+              "normalized_entropy": 0.9272912776048896
+            },
+            "4-gram": {
+              "total": 1242,
+              "unique": 931,
+              "unique_ratio": 0.749597423510467,
+              "entropy": 9.576707587156015,
+              "normalized_entropy": 0.9710087920667954
+            },
+            "5-gram": {
+              "total": 129,
+              "unique": 114,
+              "unique_ratio": 0.8837209302325582,
+              "entropy": 6.763165239919362,
+              "normalized_entropy": 0.9897957124875655
+            },
+            "sample_size": 9981
+          },
+          "semantic_diversity": {
+            "total_mst_weight": 30.750511944293976,
+            "average_edge_weight": 0.003081213621672743,
+            "distinct_nodes": 3222,
+            "distinct_ratio": 0.32281334535617673,
+            "sample_size": 9981,
+            "device_used": "cpu"
+          },
+          "sentiment_diversity": {
+            "sentiment_by_rating": {
+              "1.0": 0.2833333333333333,
+              "2.0": 0.5746606334841629,
+              "3.0": 0.3322281167108753,
+              "4.0": 0.9319757365684576,
+              "5.0": 0.9627215849843587
+            },
+            "ideal_sentiment": {
+              "1.0": 0.0,
+              "2.0": 0.25,
+              "3.0": 0.5,
+              "4.0": 0.75,
+              "5.0": 1.0
+            },
+            "sentiment_alignment_score": 0.8009959996618561,
+            "sample_size": 9998
+          }
+        },
+        "text": {
+          "lexical_diversity": {
+            "1-gram": {
+              "total": 127141,
+              "unique": 3725,
+              "unique_ratio": 0.029298180759943684,
+              "entropy": 9.359700456879546,
+              "normalized_entropy": 0.7889809458799186
+            },
+            "2-gram": {
+              "total": 117144,
+              "unique": 45190,
+              "unique_ratio": 0.38576452912654513,
+              "entropy": 14.133683931514923,
+              "normalized_entropy": 0.9139901424405332
+            },
+            "3-gram": {
+              "total": 107392,
+              "unique": 78758,
+              "unique_ratio": 0.7333693384982122,
+              "entropy": 15.821143314299613,
+              "normalized_entropy": 0.9727026283170699
+            },
+            "4-gram": {
+              "total": 97736,
+              "unique": 88248,
+              "unique_ratio": 0.9029221576491774,
+              "entropy": 16.312716911390844,
+              "normalized_entropy": 0.9929054055209895
+            },
+            "5-gram": {
+              "total": 88152,
+              "unique": 85261,
+              "unique_ratio": 0.9672043742626373,
+              "entropy": 16.3468767455881,
+              "normalized_entropy": 0.9980022947097278
+            },
+            "sample_size": 9997
+          },
+          "semantic_diversity": {
+            "total_mst_weight": 101.28258216381073,
+            "average_edge_weight": 0.010133324878820483,
+            "distinct_nodes": 9787,
+            "distinct_ratio": 0.9790916366546618,
+            "sample_size": 9996,
+            "device_used": "cpu"
+          },
+          "sentiment_diversity": {
+            "sentiment_by_rating": {
+              "1.0": 0.033366045142296366,
+              "2.0": 0.0649056603773585,
+              "3.0": 0.20954907161803712,
+              "4.0": 0.7029016890428758,
+              "5.0": 0.8000521376433786
+            },
+            "ideal_sentiment": {
+              "1.0": 0.0,
+              "2.0": 0.25,
+              "3.0": 0.5,
+              "4.0": 0.75,
+              "5.0": 1.0
+            },
+            "sentiment_alignment_score": 0.8488085027078707,
+            "sample_size": 9997
+          }
+        }
+      }
+    }
+  },
+  "privacy": {
+    "exact_matches": {
+      "exact_match_percentage": 0.0,
+      "risk_level": "low"
+    },
+    "membership_inference": {
+      "distinguishability_auc": 0.9999994999548709,
+      "synthetic_confidence": 0.9537060000000002,
+      "original_confidence": 0.04693800000000001,
+      "fidelity_score": 5.000451290815278e-07,
+      "interpretation": "Values near 1.0 indicate synthetic data is easily separable from the original distribution (poor fidelity). Values near 0.5 indicate high similarity."
+    },
+    "pii_analysis": {
+      "text": {
+        "exact_match_percentage": 0.03095017022593624,
+        "risk_level": "low"
+      },
+      "asin": {
+        "exact_match_percentage": 0.0,
+        "risk_level": "low"
+      },
+      "parent_asin": {
+        "exact_match_percentage": 0.0,
+        "risk_level": "low"
+      }
+    },
+    "structured_privacy_metrics": {
+      "IMS": {
+        "ims_syn_train": 0.0,
+        "train_test_ims": 1.0,
+        "passed": true,
+        "method": "Identical Match Share (IMS)",
+        "desc": "Synthetic-Train IMS: 0.0000, Train-Test IMS: 1.0000, Passed: Yes"
+      },
+      "DCR": {
+        "syn_train_5pct": 1562172320.8000002,
+        "train_train_5pct": 469159.0,
+        "passed": "True",
+        "method": "Distance to Closest Records (DCR)",
+        "desc": "Synthetic-Train 5%: 1562172320.8000, Train-Train 5%: 469159.0000, Passed: Yes"
+      },
+      "NNDR": {
+        "syn_train_5pct": 1.0080283880960756,
+        "train_train_5pct": 1.0529012904432848,
+        "passed": "False",
+        "method": "Nearest Neighbor Distance Ratio (NNDR)",
+        "desc": "Synthetic-Train 5%: 1.0080, Train-Train 5%: 1.0529, Passed: No"
+      }
+    },
+    "reidentification_risks": {
+      "singling_out_univariate": {
+        "attack_rate": 0.009612675708191198,
+        "baseline_rate": 0.009612675708191198,
+        "control_rate": 0.006321485612273018,
+        "risk": 0.0,
+        "error": null,
+        "warning": "Attack is not better than baseline model"
+      },
+      "singling_out_multivariate": {
+        "attack_rate": 0.01849674910349284,
+        "baseline_rate": 0.01849674910349284,
+        "control_rate": 0.01849674910349284,
+        "risk": 0.0,
+        "error": null,
+        "warning": "Attack is not better than baseline model"
+      },
+      "linkability": {
+        "attack_rate": 0.035673799566679355,
+        "baseline_rate": 0.05424684758401218,
+        "control_rate": 0.035673799566679355,
+        "risk": 0.0,
+        "error": null,
+        "warning": "Attack is not better than baseline model"
+      },
+      "inference": [
+        {
+          "secret_column": "rating",
+          "attack_rate": 0.1244274643007244,
+          "baseline_rate": 0.297768634623467,
+          "control_rate": 0.162947724372445,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "title",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "text",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "asin",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "parent_asin",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "user_id",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "timestamp",
+          "attack_rate": 0.1436875943365847,
+          "baseline_rate": 0.08590720422900384,
+          "control_rate": 0.09553726924693398,
+          "risk": 0.05323638382485944,
+          "error": null
+        },
+        {
+          "secret_column": "helpful_vote",
+          "attack_rate": 0.6155607802151617,
+          "baseline_rate": 0.22072811448002586,
+          "control_rate": 0.432589544874489,
+          "risk": 0.3224671552803861,
+          "error": null
+        },
+        {
+          "secret_column": "verified_purchase",
+          "attack_rate": 0.8177921455916947,
+          "baseline_rate": 0.4807398699641397,
+          "control_rate": 0.7600117554841138,
+          "risk": 0.24076341832550066,
+          "error": null
+        }
+      ],
+      "overall_risk": {
+        "risk_score": 0.3224671552803861,
+        "risk_level": "low",
+        "explanation": "Overall risk is determined by the highest risk score among all attacks."
+      }
+    },
+    "named_entities": {
+      "synthetic": {
+        "total_entities": 1,
+        "avg_entity_density": 2.457304337142155e-05,
+        "risk_level": "low"
+      },
+      "original": {
+        "total_entities": 252,
+        "avg_entity_density": 0.006536964980544747,
+        "risk_level": "low"
+      },
+      "overlap": {
+        "overlap_percentage": 0.3968253968253968,
+        "risk_level": "low"
+      }
+    },
+    "nominal_mentions": {
+      "synthetic": {
+        "total_nominals": 157,
+        "avg_nominal_density": 0.0038579678093131837,
+        "risk_level": "low"
+      },
+      "original": {
+        "total_nominals": 1424,
+        "avg_nominal_density": 0.0369256301213567,
+        "risk_level": "low"
+      },
+      "overlap": {
+        "overlap_percentage": 5.828651685393258,
+        "risk_level": "low"
+      }
+    },
+    "stylistic_outliers": {
+      "synthetic": {
+        "num_outliers": 24,
+        "outlier_percentage": 0.24,
+        "risk_level": "low"
+      },
+      "original": {
+        "num_outliers": 0,
+        "outlier_percentage": 0.0,
+        "risk_level": "low"
+      },
+      "comparison": {
+        "outlier_ratio": Infinity,
+        "risk_level": "low"
+      }
+    },
+    "anonymeter": {
+      "singling_out_univariate": {
+        "attack_rate": 0.009612675708191198,
+        "baseline_rate": 0.006321485612273018,
+        "control_rate": 0.006321485612273018,
+        "risk": 0.003312127663287664,
+        "error": null
+      },
+      "singling_out_multivariate": {
+        "attack_rate": 0.01849674910349284,
+        "baseline_rate": 0.01849674910349284,
+        "control_rate": 0.01849674910349284,
+        "risk": 0.0,
+        "error": null,
+        "warning": "Attack is not better than baseline model"
+      },
+      "linkability": {
+        "attack_rate": 0.035673799566679355,
+        "baseline_rate": 0.035673799566679355,
+        "control_rate": 0.035673799566679355,
+        "risk": 0.0,
+        "error": null,
+        "warning": "Attack is not better than baseline model"
+      },
+      "inference": [
+        {
+          "secret_column": "rating",
+          "attack_rate": 0.17257778939037513,
+          "baseline_rate": 0.3362888946951876,
+          "control_rate": 0.13405752931865456,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "title",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "text",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "asin",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "parent_asin",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "user_id",
+          "attack_rate": 0.01849674910349284,
+          "baseline_rate": 0.01849674910349284,
+          "control_rate": 0.01849674910349284,
+          "risk": 0.0,
+          "error": null,
+          "warning": "Attack is not better than baseline model"
+        },
+        {
+          "secret_column": "timestamp",
+          "attack_rate": 0.1244274643007244,
+          "baseline_rate": 0.11479739928279427,
+          "control_rate": 0.09553726924693398,
+          "risk": 0.03194183029491565,
+          "error": null
+        },
+        {
+          "secret_column": "helpful_vote",
+          "attack_rate": 0.4903699349820699,
+          "baseline_rate": 0.1436875943365847,
+          "control_rate": 0.4903699349820699,
+          "risk": 0.0,
+          "error": null
+        },
+        {
+          "secret_column": "verified_purchase",
+          "attack_rate": 0.8563124056634153,
+          "baseline_rate": 0.4711098049462096,
+          "control_rate": 0.769641820502044,
+          "risk": 0.3762427075533487,
+          "error": null
+        }
+      ],
+      "overall_risk": {
+        "risk_score": 0.3762427075533487,
+        "risk_level": "low",
+        "explanation": "Overall risk is determined by the highest risk score among all attacks."
+      }
+    }
+  }
+}

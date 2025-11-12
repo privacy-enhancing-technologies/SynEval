@@ -2,96 +2,96 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]  # Python 3.12 not supported due to anonymeter compatibility
+        python-version: ["3.10", "3.11"] # Python 3.12 not supported due to anonymeter compatibility
 
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov pytest-mock pytest-xdist coverage
-    
-    - name: Download NLTK data
-      run: |
-        python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('maxent_ne_chunker'); nltk.download('words'); nltk.download('stopwords')"
-    
-    - name: Download spaCy model
-      run: |
-        python -m spacy download en_core_web_sm
-    
-    - name: Create plots directory
-      run: |
-        mkdir -p plots
-    
-    - name: Run tests
-      run: |
-        python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=html
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-mock pytest-xdist coverage
+
+      - name: Download NLTK data
+        run: |
+          python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab'); nltk.download('averaged_perceptron_tagger'); nltk.download('maxent_ne_chunker'); nltk.download('words'); nltk.download('stopwords')"
+
+      - name: Download spaCy model
+        run: |
+          python -m spacy download en_core_web_sm
+
+      - name: Create plots directory
+        run: |
+          mkdir -p plots
+
+      - name: Run tests
+        run: |
+          python -m pytest tests/ -v --cov=. --cov-report=xml --cov-report=html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.11  # Python 3.12 not supported due to anonymeter compatibility
-    
-    - name: Install linting dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install flake8 isort mypy  # black removed from CI checks
-    
-    - name: Run flake8
-      run: |
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    
-    # Black formatting check removed - format code manually with 'black .' before committing
-    # - name: Run black
-    #   run: |
-    #     black --check --diff .
-    
-    - name: Run isort
-      run: |
-        isort --check-only --diff .
-    
-    - name: Run mypy
-      run: |
-        # Run mypy but don't fail CI on type errors (warnings only)
-        mypy . --ignore-missing-imports --no-error-summary || true
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11 # Python 3.12 not supported due to anonymeter compatibility
+
+      - name: Install linting dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 isort mypy  # black removed from CI checks
+
+      - name: Run flake8
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      # Black formatting check removed - format code manually with 'black .' before committing
+      # - name: Run black
+      #   run: |
+      #     black --check --diff .
+
+      - name: Run isort
+        run: |
+          isort --check-only --diff .
+
+      - name: Run mypy
+        run: |
+          # Run mypy but don't fail CI on type errors (warnings only)
+          mypy . --ignore-missing-imports --no-error-summary || true
 
   # Build job removed - project doesn't need to be packaged for distribution
   # If you need to publish to PyPI in the future, uncomment this section
@@ -100,21 +100,21 @@ jobs:
   #   needs: [test, lint]
   #   steps:
   #   - uses: actions/checkout@v4
-  #   
+  #
   #   - name: Set up Python
   #     uses: actions/setup-python@v4
   #     with:
   #       python-version: 3.11  # Python 3.12 not supported due to anonymeter compatibility
-  #   
+  #
   #   - name: Install build dependencies
   #     run: |
   #       python -m pip install --upgrade pip
   #       pip install build twine
-  #   
+  #
   #   - name: Build package
   #     run: |
   #       python -m build
-  #   
+  #
   #   - name: Check package
   #     run: |
   #       twine check dist/*

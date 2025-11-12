@@ -1,0 +1,334 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SynEval Evaluation Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --glass-bg: rgba(255, 255, 255, 0.55);
+      --glass-border: rgba(255, 255, 255, 0.38);
+      --text-primary: rgba(16, 24, 32, 0.88);
+      --text-secondary: rgba(60, 72, 88, 0.72);
+      --accent-start: rgba(102, 126, 234, 0.9);
+      --accent-end: rgba(118, 75, 162, 0.9);
+      --frost-shadow: 0 24px 45px rgba(15, 23, 42, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at top, #f8fbff 0%, #e7ebf8 45%, #d9deec 100%);
+      color: var(--text-primary);
+      margin: 0;
+      padding: 0 0 64px;
+      min-height: 100vh;
+      position: relative;
+      line-height: 1.6;
+      letter-spacing: -0.01em;
+      backdrop-filter: saturate(140%);
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='320' height='320' viewBox='0 0 320 320' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.12' fill-rule='evenodd'%3E%3Cpath d='M0 0h40v40H0zM80 80h40v40H80zM160 160h40v40h-40zM240 240h40v40h-40z'/%3E%3C/svg%3E")
+        repeat;
+      opacity: 0.8;
+      z-index: -2;
+    }
+
+    header {
+      padding: 56px 12% 72px;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.35));
+      backdrop-filter: blur(26px) saturate(160%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 36px 70px rgba(90, 107, 143, 0.25);
+      z-index: 10;
+    }
+
+    header h1 {
+      margin: 0 0 16px;
+      font-size: clamp(30px, 4vw, 40px);
+      font-weight: 700;
+      color: rgba(14, 20, 35, 0.92);
+      letter-spacing: -0.015em;
+    }
+
+    header p {
+      margin: 10px 0;
+      font-size: 16px;
+      color: var(--text-secondary);
+    }
+
+    header code {
+      display: inline-block;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 12px;
+      background: rgba(28, 43, 72, 0.1);
+      backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 32px auto 0;
+      padding: 0 clamp(16px, 6vw, 64px);
+    }
+
+    .context {
+      background: var(--glass-bg);
+      border-radius: 22px;
+      padding: 24px clamp(20px, 5vw, 42px);
+      backdrop-filter: blur(22px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 22px 45px rgba(15, 23, 42, 0.22);
+      color: var(--text-secondary);
+      margin-bottom: 42px;
+    }
+
+    .context strong {
+      color: var(--text-primary);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: clamp(24px, 4vw, 40px);
+    }
+
+    .card {
+      background: var(--glass-bg);
+      border-radius: 26px;
+      padding: clamp(24px, 4vw, 32px);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--frost-shadow);
+      backdrop-filter: blur(24px);
+      transition: transform 0.4s ease, box-shadow 0.4s ease, border-color 0.4s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .card:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 32px 70px rgba(58, 78, 107, 0.35);
+      border-color: rgba(255, 255, 255, 0.6);
+    }
+
+    .card h2 {
+      margin: 0 0 20px;
+      font-size: 20px;
+      font-weight: 700;
+      color: rgba(31, 41, 55, 0.85);
+      letter-spacing: -0.01em;
+    }
+
+    .score {
+      font-size: clamp(32px, 5vw, 42px);
+      font-weight: 700;
+      margin-bottom: 18px;
+      letter-spacing: -0.03em;
+    }
+
+    .score.ok { color: #2ecc71; }
+    .score.warning { color: #ed8936; }
+    .score.error { color: #e53e3e; }
+    .score.skipped { color: #718096; }
+
+    .progress-wrap {
+      background: rgba(255, 255, 255, 0.55);
+      border-radius: 999px;
+      height: 12px;
+      margin-bottom: 22px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    .progress-bar {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+      transition: width 0.45s ease;
+    }
+
+    .status-tag {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      margin-bottom: 16px;
+      background: rgba(255, 255, 255, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      color: rgba(30, 41, 59, 0.72);
+      backdrop-filter: blur(18px);
+    }
+
+    .status-excellent {
+      background: rgba(16, 185, 129, 0.22);
+      color: #065f46;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .status-great {
+      background: rgba(72, 187, 120, 0.2);
+      color: #18603e;
+      border-color: rgba(72, 187, 120, 0.3);
+    }
+
+    .status-good {
+      background: rgba(101, 163, 13, 0.18);
+      color: #365314;
+      border-color: rgba(101, 163, 13, 0.25);
+    }
+
+    .status-fair {
+      background: rgba(237, 137, 54, 0.18);
+      color: #9c4a14;
+      border-color: rgba(237, 137, 54, 0.25);
+    }
+
+    .status-poor {
+      background: rgba(229, 62, 62, 0.2);
+      color: #8b1f1f;
+      border-color: rgba(229, 62, 62, 0.3);
+    }
+
+    .status-skipped {
+      background: rgba(160, 174, 192, 0.18);
+      color: #364152;
+      border-color: rgba(160, 174, 192, 0.25);
+    }
+
+    ul {
+      padding-left: 20px;
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 14px;
+      line-height: 1.7;
+      flex: 1;
+    }
+
+    ul li {
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0 0 18px;
+      color: var(--text-secondary);
+      font-size: 15px;
+    }
+
+    footer {
+      margin-top: 72px;
+      text-align: center;
+      font-size: 13px;
+      color: rgba(76, 86, 106, 0.72);
+    }
+
+    @media (max-width: 1024px) {
+      .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 600px) {
+      header {
+        padding: 36px clamp(24px, 8vw, 42px) 56px;
+      }
+
+      header code {
+        width: 100%;
+      }
+
+      .container {
+        margin-top: 32px;
+      }
+
+      .card {
+        padding: 24px;
+      }
+
+      .cards {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SynEval Evaluation Dashboard</h1>
+    <p>Generated on 2025-11-12 04:49:23</p>
+    <p>Command: <code>run.py --synthetic data/gpt4.1_synthetic.csv --original data/real_10k.csv --metadata data/metadata.json --dimensions fidelity utility diversity privacy --utility-input text --utility-output rating --output artifacts/reports/results.json --plot --html</code></p>
+  </header>
+  <main class="container">
+    <section class="context">
+      <strong>Synthetic:</strong> data/gpt4.1_synthetic.csv<br/><strong>Original:</strong> data/real_10k.csv<br/><strong>Metadata:</strong> data/metadata.json<br/><strong>Dimensions:</strong> fidelity, utility, diversity, privacy
+    </section>
+    <section class="cards">
+      
+      <article class="card">
+        <span class="status-tag status-good">GOOD</span>
+        <h2>Fidelity</h2>
+        <div class="score ok">71.6%</div>
+        <div class="progress-wrap">
+          <div class="progress-bar" style="width: 71.6%;"></div>
+        </div>
+        <p>Measures how well synthetic data preserves statistical characteristics.</p>
+        <ul><li>Data Validity: 43.2%</li><li>Data Structure: 100.0%</li><li>Quality Score: 15.4%</li></ul>
+      </article>
+
+
+      <article class="card">
+        <span class="status-tag status-great">GREAT</span>
+        <h2>Utility</h2>
+        <div class="score ok">82.0%</div>
+        <div class="progress-wrap">
+          <div class="progress-bar" style="width: 82.0%;"></div>
+        </div>
+        <p>Evaluates how well models trained on synthetic data generalize to real data (TSTR).</p>
+        <ul><li>Real Model Accuracy: 64.0%</li><li>Synthetic Model Accuracy: 52.5%</li><li>Performance Ratio (Syn/Real): 82.0%</li><li>Task Type: classification</li></ul>
+      </article>
+
+
+      <article class="card">
+        <span class="status-tag status-poor">POOR</span>
+        <h2>Diversity</h2>
+        <div class="score error">20.8%</div>
+        <div class="progress-wrap">
+          <div class="progress-bar" style="width: 20.8%;"></div>
+        </div>
+        <p>Assesses variety, uniqueness, and entropy of synthetic data.</p>
+        <ul><li>Average Coverage: 20.8%</li><li>Synthetic Duplicate Ratio: 0.00%</li><li>Entropy Ratio (Syn/Real): 106.7%</li></ul>
+      </article>
+
+
+      <article class="card">
+        <span class="status-tag status-poor">POOR</span>
+        <h2>Privacy</h2>
+        <div class="score error">0.0%</div>
+        <div class="progress-wrap">
+          <div class="progress-bar" style="width: 0.0%;"></div>
+        </div>
+        <p>Analyzes leakage risk via membership inference, exact matches, and other privacy tests.</p>
+        <ul><li>Membership Inference AUC: 100.0% (lower is better)</li><li>Classifier Confidence (Syn/Orig): 95.4% / 4.7%</li><li>Exact Match Percentage: 0.00%</li><li>Exact Match Risk: low</li></ul>
+      </article>
+
+    </section>
+    <footer>
+      SynEval &mdash; Synthetic Data Evaluation Framework
+    </footer>
+  </main>
+</body>
+</html>

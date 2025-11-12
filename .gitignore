@@ -26,4 +26,13 @@ Thumbs.db
 *.log
 
 # Results
-*_results.json 
+*_results.json
+
+# Coverage reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.cover
+.hypothesis/
+.pytest_cache/ 
