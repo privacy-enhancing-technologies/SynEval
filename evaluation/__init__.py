@@ -8,10 +8,10 @@ This module contains all evaluation components:
 - DiversityEvaluator: Evaluates diversity metrics
 """
 
-from .utility import UtilityEvaluator
+from .diversity import DiversityEvaluator
 from .fidelity import FidelityEvaluator
 from .privacy import PrivacyEvaluator
-from .diversity import DiversityEvaluator
+from .utility import UtilityEvaluator
 
 __all__ = [
     "UtilityEvaluator",
