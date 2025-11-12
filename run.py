@@ -7,18 +7,13 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from tqdm import tqdm
-
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
-from evaluation import (
-    DiversityEvaluator,
-    FidelityEvaluator,
-    PrivacyEvaluator,
-    UtilityEvaluator,
-)
 from artifacts.utils.html_report import EvaluationHTMLGenerator
+from evaluation import (DiversityEvaluator, FidelityEvaluator,
+                        PrivacyEvaluator, UtilityEvaluator)
 
 ARTIFACTS_DIR = Path("artifacts")
 CACHE_DIR = ARTIFACTS_DIR / "cache"
