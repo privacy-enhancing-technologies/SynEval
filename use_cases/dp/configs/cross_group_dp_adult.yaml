@@ -1,0 +1,110 @@
+version: 1
+
+datasets:
+  adult:
+    display_name: "Adult Income"
+    real_data:
+      train_path: use_cases/dp/data_adult/adult/train.csv
+      test_path: use_cases/dp/data_adult/adult/test.csv
+    metadata:
+      info_json_path: use_cases/dp/data_adult/adult/info.json
+    utility:
+      target_column: income
+      input_columns:
+        - age
+        - fnlwgt
+        - education.num
+        - capital.gain
+        - capital.loss
+        - hours.per.week
+
+experiment_groups:
+  - key: ADULT_BENCHMARK_BASE
+    display_name: "Adult Income Benchmark (Base)"
+    dataset: adult
+    experiments:
+      - epsilon: "1.0"
+        delta: "1e-5"
+        synthetic_path: use_cases/dp/data_adult/adult/adult_benchmark_dp_eps1.0_delta1e-05/8000/samples.csv
+        model_paths:
+          primary: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps1.0_delta1e-05/model_8000.pt
+          schedule: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps1.0_delta1e-05/model_8000.pt
+      - epsilon: "10.0"
+        delta: "1e-5"
+        synthetic_path: use_cases/dp/data_adult/adult/adult_benchmark_dp_eps10.0_delta1e-05/8000/samples.csv
+        model_paths:
+          primary: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps10.0_delta1e-05/model_8000.pt
+          schedule: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps10.0_delta1e-05/model_8000.pt
+      - epsilon: "100.0"
+        delta: "1e-5"
+        synthetic_path: use_cases/dp/data_adult/adult/adult_benchmark_dp_eps100.0_delta1e-05/8000/samples.csv
+        model_paths:
+          primary: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps100.0_delta1e-05/model_8000.pt
+          schedule: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps100.0_delta1e-05/model_8000.pt
+
+  - key: ADULT_BENCHMARK_EMA
+    display_name: "Adult Income Benchmark (EMA)"
+    dataset: adult
+    experiments:
+      - epsilon: "1.0"
+        delta: "1e-5"
+        synthetic_path: use_cases/dp/data_adult/adult/adult_benchmark_dp_eps1.0_delta1e-05/8000/ema/samples.csv
+        model_paths:
+          primary: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps1.0_delta1e-05/ema_model_8000.pt
+          schedule: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps1.0_delta1e-05/model_8000.pt
+      - epsilon: "10.0"
+        delta: "1e-5"
+        synthetic_path: use_cases/dp/data_adult/adult/adult_benchmark_dp_eps10.0_delta1e-05/8000/ema/samples.csv
+        model_paths:
+          primary: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps10.0_delta1e-05/ema_model_8000.pt
+          schedule: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps10.0_delta1e-05/model_8000.pt
+      - epsilon: "100.0"
+        delta: "1e-5"
+        synthetic_path: use_cases/dp/data_adult/adult/adult_benchmark_dp_eps100.0_delta1e-05/8000/ema/samples.csv
+        model_paths:
+          primary: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps100.0_delta1e-05/ema_model_8000.pt
+          schedule: use_cases/dp/data_adult/ckpt/adult/adult_benchmark_dp_eps100.0_delta1e-05/model_8000.pt
+
+evaluations:
+  fidelity:
+    enabled: true
+  utility:
+    enabled: true
+  privacy:
+    enabled: true
+  diversity:
+    enabled: true
+  mia:
+    enabled: true
+
+privacy:
+  skip_anonymeter: true
+
+mia:
+  adapter: tabdiff
+  dataset: adult
+  n_shadow: 1000
+
+reporting:
+  individual_reports: true
+  in_group_comparisons: true
+  cross_group_comparisons: true
+  reports_output_dir: reports/dp_evaluation_adult
+  formats:
+    - html
+    - json
+
+execution:
+  parallel_workers: 4
+  device: auto
+  enable_cache: true
+  cache_dir: artifacts/cache
+  openblas_threads: 32
+  log_level: INFO
+  log_file: dp_evaluation_adult.log
+  continue_on_error: true
+  save_intermediate: true
+
+validation:
+  check_files_exist: true
+  validate_schema: true
