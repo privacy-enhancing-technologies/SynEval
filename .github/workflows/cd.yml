@@ -1,0 +1,58 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Package application for release
+        run: zip -r SynEval.zip . -x ".git/*" ".github/*"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SynEval-artifact-${{ matrix.python-version }}
+          path: ./SynEval.zip
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build-and-package
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Rename Artifacts for Release
+        run: |
+          mv artifacts/SynEval-artifact-3.10/SynEval.zip artifacts/SynEval-artifact-3.10/SynEval-py3.10.zip
+          mv artifacts/SynEval-artifact-3.11/SynEval.zip artifacts/SynEval-artifact-3.11/SynEval-py3.11.zip
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          # This will find the release that triggered the workflow
+          # and upload the renamed assets to it.
+          files: |
+            artifacts/SynEval-artifact-3.10/SynEval-py3.10.zip
+            artifacts/SynEval-artifact-3.11/SynEval-py3.11.zip
