@@ -1,0 +1,11 @@
+use,sector,loan_amount,term_in_months
+to purchase a dairy cow,Agriculture,200,14
+to buy farming equipment,Agriculture,500,20
+to repair motorcycle,Transportation,150,8
+to start a small restaurant,Food,400,12
+to buy inventory for shop,Retail,300,10
+to purchase buffalo for milk,Agriculture,250,15
+to fix auto rickshaw,Transportation,175,9
+to buy fruits to sell,Food,100,6
+to expand clothing store,Retail,450,18
+to purchase seeds and fertilizer,Agriculture,180,12

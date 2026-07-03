@@ -1,0 +1,20 @@
+# Multimodal Diffusion Configuration Example
+
+method: diffusion
+
+# Text Encoder
+text_encoder_model: all-MiniLM-L6-v2
+
+# Model Architecture
+latent_dim: 128
+hidden_dim: 256
+n_diffusion_steps: 50
+
+# Noise Schedule
+beta_start: 0.0001
+beta_end: 0.02
+
+# Training Parameters
+n_epochs: 100
+batch_size: 32
+learning_rate: 0.001
