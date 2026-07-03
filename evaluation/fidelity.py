@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from scipy.spatial.distance import jensenshannon
 from sklearn.feature_extraction.text import TfidfVectorizer
 from textblob import TextBlob
 
@@ -735,3 +736,93 @@ class FidelityEvaluator:
             return "Poor fidelity - synthetic data shows significant deviation from original"
         else:
             return "Very poor fidelity - synthetic data does not preserve original data characteristics"
+
+
+def compute_jsd(P: np.ndarray, Q: np.ndarray) -> float:
+    """
+    Compute Jensen-Shannon Divergence between two probability distributions.
+
+    JSD is a symmetric, bounded measure of divergence between two probability distributions.
+    Formula: JSD(P || Q) = 0.5 * KL(P || M) + 0.5 * KL(Q || M) where M = 0.5 * (P + Q)
+
+    Args:
+        P: First probability distribution (can be 1D or 2D array)
+        Q: Second probability distribution (same shape as P)
+
+    Returns:
+        float: Jensen-Shannon Divergence in range [0, 1], where 0 = identical distributions
+
+    Raises:
+        ValueError: If P and Q have different shapes
+    """
+    if P.shape != Q.shape:
+        raise ValueError(f"P and Q must have the same shape. Got P: {P.shape}, Q: {Q.shape}")
+
+    P_flat = P.flatten()
+    Q_flat = Q.flatten()
+
+    P_norm = P_flat / (P_flat.sum() + 1e-10)
+    Q_norm = Q_flat / (Q_flat.sum() + 1e-10)
+
+    # scipy's jensenshannon returns sqrt(JSD), so square it to get actual JSD
+    jsd_value = jensenshannon(P_norm, Q_norm, base=2)
+
+    return float(jsd_value ** 2)
+
+
+def _interpret_jsd(jsd: float) -> str:
+    """Interpret Joint Spectral Divergence score."""
+    if jsd < 0.1:
+        return "Excellent joint distribution match - synthetic data preserves cross-modal correlations"
+    elif jsd < 0.2:
+        return "Good joint distribution match - minor deviations in cross-modal patterns"
+    elif jsd < 0.3:
+        return "Fair joint distribution match - some cross-modal correlation preserved"
+    elif jsd < 0.5:
+        return "Poor joint distribution match - significant deviation in cross-modal patterns"
+    else:
+        return "Very poor joint distribution match - cross-modal correlations broken (possible hallucination)"
+
+
+def evaluate_fidelity_multimodal(
+    real_df: pd.DataFrame,
+    synth_df: pd.DataFrame,
+    quantizer,
+) -> Dict[str, any]:
+    """
+    Evaluate multimodal fidelity using Joint Spectral Divergence (JSD).
+
+    Computes JSD over the joint distribution of quantized multimodal data,
+    detecting cross-modal hallucinations where marginal distributions look
+    good but the joint distribution is broken (e.g., Tilted Data scenario).
+
+    Args:
+        real_df: Real multimodal DataFrame
+        synth_df: Synthetic multimodal DataFrame
+        quantizer: SemanticQuantizer instance already fitted on real data
+
+    Returns:
+        Dict with joint_spectral_divergence, marginal divergences, and interpretation
+    """
+    real_quantized = quantizer.transform(real_df)
+    synth_quantized = quantizer.transform(synth_df)
+
+    real_joint = quantizer.get_joint_distribution(real_quantized)
+    synth_joint = quantizer.get_joint_distribution(synth_quantized)
+
+    joint_jsd = compute_jsd(real_joint, synth_joint)
+
+    real_marginal_text = real_joint.sum(axis=1)
+    synth_marginal_text = synth_joint.sum(axis=1)
+    real_marginal_tabular = real_joint.sum(axis=0)
+    synth_marginal_tabular = synth_joint.sum(axis=0)
+
+    marginal_text_jsd = compute_jsd(real_marginal_text, synth_marginal_text)
+    marginal_tabular_jsd = compute_jsd(real_marginal_tabular, synth_marginal_tabular)
+
+    return {
+        "joint_spectral_divergence": float(joint_jsd),
+        "marginal_text_divergence": float(marginal_text_jsd),
+        "marginal_tabular_divergence": float(marginal_tabular_jsd),
+        "interpretation": _interpret_jsd(joint_jsd),
+    }

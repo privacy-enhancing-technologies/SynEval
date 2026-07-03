@@ -663,18 +663,54 @@ class DiversityEvaluator:
 
         return results
 
+    def _calculate_text_coverage(self, text_column: str) -> float:
+        """
+        Calculate vocabulary coverage for a text column.
+        Coverage = (common_vocab / original_vocab) * 100
+        """
+        try:
+            stop_words = set(stopwords.words("english"))
+            tokenizer = RegexpTokenizer(r"[A-Za-z]+(?:'[A-Za-z]+)*")
+
+            def tokenize_and_remove_stopwords(text: str):
+                tokens = tokenizer.tokenize(str(text).lower())
+                return [t for t in tokens if t not in stop_words]
+
+            orig_tokens = []
+            for text in self.original_data[text_column].dropna():
+                orig_tokens.extend(tokenize_and_remove_stopwords(text))
+            orig_vocab = set(orig_tokens)
+
+            syn_tokens = []
+            for text in self.synthetic_data[text_column].dropna():
+                syn_tokens.extend(tokenize_and_remove_stopwords(text))
+            syn_vocab = set(syn_tokens)
+
+            if len(orig_vocab) == 0:
+                return 0.0
+
+            common_vocab = orig_vocab.intersection(syn_vocab)
+            return (len(common_vocab) / len(orig_vocab)) * 100
+
+        except Exception as e:
+            logger.error(f"Error calculating text coverage for {text_column}: {str(e)}")
+            return 0.0
+
     def evaluate_text_diversity(self) -> Dict:
         """
         Evaluate diversity metrics for text data.
 
         Returns:
             Dict: Dictionary containing lexical, semantic, and sentiment diversity metrics
-            for both synthetic and real datasets
+            for both synthetic and real datasets, plus coverage metrics
         """
-        results = {"synthetic": {}, "real": {}}
+        results = {"synthetic": {}, "real": {}, "coverage": {}}
 
         for col in tqdm(self.text_columns, desc="Evaluating text columns"):
             try:
+                text_coverage = self._calculate_text_coverage(col)
+                results["coverage"][col] = text_coverage
+
                 # Evaluate synthetic data
                 logger.info(f"Evaluating synthetic data for column: {col}")
                 # Lexical diversity
@@ -743,6 +779,7 @@ class DiversityEvaluator:
                     "semantic_diversity": {},
                     "sentiment_diversity": {},
                 }
+                results["coverage"][col] = 0.0
                 results["real"][col] = {
                     "lexical_diversity": {},
                     "semantic_diversity": {},
@@ -1275,3 +1312,115 @@ class DiversityEvaluator:
             results["skipped_metrics"] = self.unavailable_metrics
 
         return results
+
+
+def compute_joint_entropy(joint_prob: np.ndarray) -> float:
+    """
+    Compute Joint Shannon Entropy for a joint probability distribution.
+
+    H(X,Y) = -Σ Σ P(x,y) * log2(P(x,y))
+
+    Args:
+        joint_prob: 2D array of joint probabilities P(x,y)
+
+    Returns:
+        float: Joint Shannon entropy in bits
+    """
+    probs = joint_prob.flatten()
+    probs = probs[probs > 0]
+    return float(-np.sum(probs * np.log2(probs)))
+
+
+def evaluate_diversity_multimodal(
+    real_df: pd.DataFrame,
+    synth_df: pd.DataFrame,
+    quantizer,
+) -> Dict:
+    """
+    Evaluate multimodal diversity using Joint Shannon Entropy.
+
+    Detects cross-modal mode collapse by comparing joint entropy of
+    text-tabular combinations between real and synthetic data.
+
+    Args:
+        real_df: Real/original dataset
+        synth_df: Synthetic dataset
+        quantizer: SemanticQuantizer instance for quantizing data
+
+    Returns:
+        Dict with multimodal_metrics (joint_shannon_entropy, real_joint_entropy,
+        diversity_ratio, interpretation) and unimodal_metrics (marginal entropies)
+    """
+    try:
+        if len(real_df) == 0 or len(synth_df) == 0:
+            logger.warning("Empty dataset(s) provided for diversity evaluation")
+            return {
+                "multimodal_metrics": {
+                    "joint_shannon_entropy": 0.0,
+                    "real_joint_entropy": 0.0,
+                    "diversity_ratio": 0.0,
+                    "interpretation": "Error: Empty dataset(s)",
+                },
+                "unimodal_metrics": {
+                    "text_marginal_entropy": 0.0,
+                    "tabular_marginal_entropy": 0.0,
+                },
+                "error": "Empty dataset(s)",
+            }
+
+        logger.info("Quantizing real dataset...")
+        real_quantized = quantizer.transform(real_df)
+        logger.info("Quantizing synthetic dataset...")
+        synth_quantized = quantizer.transform(synth_df)
+
+        logger.info("Computing joint distributions...")
+        real_joint_dist = quantizer.get_joint_distribution(real_quantized)
+        synth_joint_dist = quantizer.get_joint_distribution(synth_quantized)
+
+        real_joint_entropy = compute_joint_entropy(real_joint_dist)
+        synth_joint_entropy = compute_joint_entropy(synth_joint_dist)
+
+        diversity_ratio = synth_joint_entropy / (real_joint_entropy + 1e-10)
+
+        if diversity_ratio < 0.7:
+            interpretation = "Severe mode collapse detected"
+        elif diversity_ratio < 0.9:
+            interpretation = "Moderate mode collapse detected"
+        else:
+            interpretation = "Good diversity, no significant mode collapse"
+
+        text_marginal_entropy = compute_joint_entropy(
+            synth_joint_dist.sum(axis=1).reshape(-1, 1)
+        )
+        tabular_marginal_entropy = compute_joint_entropy(
+            synth_joint_dist.sum(axis=0).reshape(-1, 1)
+        )
+
+        return {
+            "multimodal_metrics": {
+                "joint_shannon_entropy": round(synth_joint_entropy, 2),
+                "real_joint_entropy": round(real_joint_entropy, 2),
+                "diversity_ratio": round(diversity_ratio, 2),
+                "interpretation": interpretation,
+            },
+            "unimodal_metrics": {
+                "text_marginal_entropy": round(text_marginal_entropy, 2),
+                "tabular_marginal_entropy": round(tabular_marginal_entropy, 2),
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"Error in multimodal diversity evaluation: {str(e)}")
+        return {
+            "multimodal_metrics": {
+                "joint_shannon_entropy": 0.0,
+                "real_joint_entropy": 0.0,
+                "diversity_ratio": 0.0,
+                "interpretation": f"Error: {str(e)}",
+            },
+            "unimodal_metrics": {
+                "text_marginal_entropy": 0.0,
+                "tabular_marginal_entropy": 0.0,
+            },
+            "error": str(e),
+        }

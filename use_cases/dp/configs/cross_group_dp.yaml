@@ -1,0 +1,235 @@
+version: 1
+
+datasets:
+  stocks:
+    display_name: "Stocks Time-Series"
+    default_columns:
+      - Open
+      - High
+      - Low
+      - Close
+      - Adj_Close
+      - Volume
+    utility:
+      target_column: Close
+      input_columns:
+        - Open
+        - Volume
+        - Low
+        - High
+      selected_metrics:
+        - tstr_accuracy
+        - correlation_analysis
+
+experiment_groups:
+  - key: OUTPUT_GRID_ROW_DP_EXTREMA
+    display_name: "Row DP + Extrema Protection, 10k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_ROW_DP_EXTREMA
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_ROW_DP_EXTREMA_LONG
+    display_name: "Row DP + Extrema Protection, 20k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_ROW_DP_EXTREMA_LONG
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_ROW_TRUE_EXTREMA
+    display_name: "Row DP + True Extrema, 10k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_ROW_TRUE_EXTREMA
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_ROW_TRUE_EXTREMA_2_5_NORM_64_BATCH
+    display_name: "Row DP + True Extrema, 2.5 Clip, 64 Batch"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_ROW_TRUE_EXTREMA_2_5_NORM_64_BATCH
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_ROW_TRUE_EXTREMA_LONG
+    display_name: "Row DP + True Extrema, 20k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_ROW_TRUE_EXTREMA_LONG
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_WINDOW_DP_EXTREMA
+    display_name: "Window DP + Extrema Protection, 10k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_WINDOW_DP_EXTREMA
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_WINDOW_DP_EXTREMA_LONG
+    display_name: "Window DP + Extrema Protection, 20k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_WINDOW_DP_EXTREMA_LONG
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_WINDOW_TRUE_EXTREMA
+    display_name: "Window DP + True Extrema, 10k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_WINDOW_TRUE_EXTREMA
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_WINDOW_TRUE_EXTREMA_2_5_NORM_64_BATCH
+    display_name: "Window DP + True Extrema, 2.5 Clip, 64 Batch"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_WINDOW_TRUE_EXTREMA_2_5_NORM_64_BATCH
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+  - key: OUTPUT_GRID_WINDOW_TRUE_EXTREMA_LONG
+    display_name: "Window DP + True Extrema, 20k"
+    dataset: stocks
+    generator:
+      type: pattern
+      base_dir: use_cases/dp/data/OUTPUT_GRID_WINDOW_TRUE_EXTREMA_LONG
+      epsilon_prefix: dp_eps
+      epsilons: ["1", "10", "100", "1000", "10000", "Inf"]
+      data:
+        subdir: stocks
+        synthetic: ddpm_fake_stocks.csv
+        train: samples/stocks_ground_truth_24_train.csv
+        test: samples/stocks_ground_truth_24_test.npy
+      model:
+        subdir: stocks/checkpoints
+        file: checkpoint-10.pt
+
+evaluations:
+  fidelity:
+    enabled: true
+  utility:
+    enabled: true
+  privacy:
+    enabled: true
+  diversity:
+    enabled: true
+  mia:
+    enabled: true
+
+privacy:
+  skip_anonymeter: true
+
+mia:
+  adapter: diffusion_ts
+  dataset: stocks
+  n_shadow: 1000
+
+reporting:
+  individual_reports: true
+  in_group_comparisons: true
+  cross_group_comparisons: true
+  reports_output_dir: reports/dp_evaluation
+  formats:
+    - html
+    - json
+
+execution:
+  parallel_workers: 4
+  device: auto
+  enable_cache: true
+  cache_dir: artifacts/cache
+  log_level: INFO
+  log_file: dp_evaluation.log
+  continue_on_error: true
+  save_intermediate: true
+
+validation:
+  check_files_exist: true

@@ -841,3 +841,118 @@ class UtilityEvaluator:
                     text_col=kwargs.get("text_col", "review"),
                 )
         return results
+
+
+def evaluate_utility_multimodal(
+    real_df: pd.DataFrame,
+    synth_df: pd.DataFrame,
+    quantizer,
+    target_column: str,
+) -> Dict:
+    """
+    Evaluate cross-modal predictability utility.
+
+    Implements Text-to-Attribute (T2A) and Attribute-to-Text (A2T) predictive probing:
+    - T2A: Train on synthetic text embeddings → predict tabular target, evaluate on real test
+    - A2T: Train on synthetic tabular features → predict text clusters, evaluate on real test
+
+    Args:
+        real_df: Real dataset with both text and tabular columns
+        synth_df: Synthetic dataset with both text and tabular columns
+        quantizer: Fitted SemanticQuantizer instance with text_clusterer
+        target_column: Name of the tabular column to predict in T2A
+
+    Returns:
+        Dict with text_to_attribute and attribute_to_text metrics
+    """
+    real_train, real_test = train_test_split(
+        real_df, test_size=0.2, random_state=42, shuffle=True
+    )
+
+    text_col = quantizer.text_columns[0]
+    tabular_cols = quantizer.tabular_columns
+
+    synth_texts = synth_df[text_col].fillna("").tolist()
+    real_test_texts = real_test[text_col].fillna("").tolist()
+
+    synth_text_embeddings = quantizer.text_clusterer.get_embeddings(synth_texts)
+    real_test_text_embeddings = quantizer.text_clusterer.get_embeddings(real_test_texts)
+
+    synth_target = synth_df[target_column].fillna(
+        synth_df[target_column].mode().iloc[0] if not synth_df[target_column].mode().empty
+        else 0
+    )
+    real_test_target = real_test[target_column].fillna(
+        real_test[target_column].mode().iloc[0] if not real_test[target_column].mode().empty
+        else 0
+    )
+
+    is_string_or_categorical = (
+        real_df[target_column].dtype == "object"
+        or real_df[target_column].dtype.name == "category"
+    )
+
+    is_discrete_numeric = False
+    if not is_string_or_categorical and real_df[target_column].dtype in ["int64", "int32"]:
+        nunique = real_df[target_column].nunique()
+        if nunique < 10:
+            min_val = real_df[target_column].min()
+            max_val = real_df[target_column].max()
+            is_discrete_numeric = (max_val - min_val) < 15
+
+    is_classification = is_string_or_categorical or is_discrete_numeric
+
+    if is_classification:
+        t2a_model = RandomForestClassifier(n_estimators=100, random_state=42)
+        t2a_model.fit(synth_text_embeddings, synth_target)
+        t2a_pred = t2a_model.predict(real_test_text_embeddings)
+        text_to_attribute = {
+            "target_column": target_column,
+            "f1_score": float(f1_score(real_test_target, t2a_pred, average="macro")),
+        }
+    else:
+        t2a_model = RandomForestRegressor(n_estimators=100, random_state=42)
+        t2a_model.fit(synth_text_embeddings, synth_target)
+        t2a_pred = t2a_model.predict(real_test_text_embeddings)
+        text_to_attribute = {
+            "target_column": target_column,
+            "rmse": float(np.sqrt(mean_squared_error(real_test_target, t2a_pred))),
+        }
+
+    synth_text_clusters = quantizer.text_clusterer.transform(synth_texts)
+    real_test_text_clusters = quantizer.text_clusterer.transform(real_test_texts)
+
+    synth_tabular_df = synth_df[tabular_cols].copy()
+    real_test_tabular_df = real_test[tabular_cols].copy()
+
+    categorical_cols = [
+        col for col in tabular_cols
+        if synth_df[col].dtype == "object" or synth_df[col].dtype.name == "category"
+    ]
+    numerical_cols = [col for col in tabular_cols if col not in categorical_cols]
+
+    if categorical_cols:
+        encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        encoder.fit(synth_tabular_df[categorical_cols])
+        synth_categorical = encoder.transform(synth_tabular_df[categorical_cols])
+        real_test_categorical = encoder.transform(real_test_tabular_df[categorical_cols])
+        if numerical_cols:
+            synth_tabular = np.hstack([synth_tabular_df[numerical_cols].fillna(0).values, synth_categorical])
+            real_test_tabular = np.hstack([real_test_tabular_df[numerical_cols].fillna(0).values, real_test_categorical])
+        else:
+            synth_tabular = synth_categorical
+            real_test_tabular = real_test_categorical
+    else:
+        synth_tabular = synth_tabular_df.fillna(0).values
+        real_test_tabular = real_test_tabular_df.fillna(0).values
+
+    a2t_model = RandomForestClassifier(n_estimators=100, random_state=42)
+    a2t_model.fit(synth_tabular, synth_text_clusters)
+    a2t_pred = a2t_model.predict(real_test_tabular)
+
+    return {
+        "text_to_attribute": text_to_attribute,
+        "attribute_to_text": {
+            "cluster_prediction_f1": float(f1_score(real_test_text_clusters, a2t_pred, average="macro")),
+        },
+    }

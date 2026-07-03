@@ -38,12 +38,14 @@ from gensim.models import Word2Vec
 from joblib import Parallel, delayed
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+from scipy.spatial.distance import cdist
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics.pairwise import cosine_distances
 from sklearn.model_selection import train_test_split
 from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import StandardScaler, normalize
 from tqdm import tqdm
 
 try:
@@ -2168,3 +2170,88 @@ class PrivacyEvaluator:
             nndr = {"error": f"NNDR evaluation failed: {str(e)}"}
 
         return {"IMS": ims, "DCR": dcr, "NNDR": nndr}
+
+
+def _get_interpretation(pct_at_risk: float) -> str:
+    """Generate interpretation string based on percentage at risk."""
+    if pct_at_risk < 0.01:
+        return "Low memorization risk"
+    elif pct_at_risk < 0.05:
+        return "Moderate memorization risk"
+    else:
+        return f"High memorization risk: {pct_at_risk:.1f}% of synthetic records very close to real records"
+
+
+def evaluate_privacy_multimodal(
+    real_df: pd.DataFrame,
+    synth_df: pd.DataFrame,
+    quantizer,
+    alpha: float = 0.5,
+    risk_threshold: float = 0.1,
+) -> Dict:
+    """
+    Evaluate privacy using semantic-aware Distance to Closest Record (DCR) in joint latent space.
+
+    Combines text embeddings and tabular features into a weighted joint space,
+    then computes the minimum distance from each synthetic point to any real point.
+    Low distances indicate potential memorization risk.
+
+    Args:
+        real_df: Real dataset DataFrame
+        synth_df: Synthetic dataset DataFrame
+        quantizer: Fitted SemanticQuantizer with text_clusterer and tabular_binner
+        alpha: Weight balancing text vs tabular (0.5 = equal weight, 1.0 = text only)
+        risk_threshold: Distance threshold for memorization risk (default: 0.1)
+
+    Returns:
+        Dict with semantic_dcr_mean, semantic_dcr_min, semantic_dcr_median,
+        pct_below_threshold, alpha, and interpretation
+    """
+    if len(real_df) == 0 or len(synth_df) == 0:
+        raise ValueError("Input DataFrames cannot be empty")
+    if not (0 <= alpha <= 1):
+        raise ValueError(f"Alpha must be in [0, 1], got {alpha}")
+
+    real_texts = real_df[quantizer.text_columns[0]].tolist()
+    synth_texts = synth_df[quantizer.text_columns[0]].tolist()
+
+    real_text_emb = quantizer.text_clusterer.get_embeddings(real_texts)
+    synth_text_emb = quantizer.text_clusterer.get_embeddings(synth_texts)
+
+    real_tabular = real_df[quantizer.tabular_columns].copy()
+    synth_tabular = synth_df[quantizer.tabular_columns].copy()
+
+    categorical_cols = real_tabular.select_dtypes(include=["object", "category"]).columns.tolist()
+
+    if categorical_cols:
+        combined = pd.concat([real_tabular, synth_tabular], axis=0, ignore_index=True)
+        combined_encoded = pd.get_dummies(combined, columns=categorical_cols)
+        real_tabular = combined_encoded.iloc[: len(real_df), :].values
+        synth_tabular = combined_encoded.iloc[len(real_df):, :].values
+    else:
+        real_tabular = real_tabular.values
+        synth_tabular = synth_tabular.values
+
+    scaler = StandardScaler()
+    real_tabular_scaled = scaler.fit_transform(real_tabular)
+    synth_tabular_scaled = scaler.transform(synth_tabular)
+
+    real_joint = np.hstack([alpha * real_text_emb, (1 - alpha) * real_tabular_scaled])
+    synth_joint = np.hstack([alpha * synth_text_emb, (1 - alpha) * synth_tabular_scaled])
+
+    real_joint_normalized = normalize(real_joint, norm="l2")
+    synth_joint_normalized = normalize(synth_joint, norm="l2")
+
+    distances = cdist(synth_joint_normalized, real_joint_normalized, metric="euclidean")
+    dcr_values = np.min(distances, axis=1)
+
+    pct_below_threshold = float(np.sum(dcr_values < risk_threshold) / len(dcr_values) * 100)
+
+    return {
+        "semantic_dcr_mean": float(np.mean(dcr_values)),
+        "semantic_dcr_min": float(np.min(dcr_values)),
+        "semantic_dcr_median": float(np.median(dcr_values)),
+        "pct_below_threshold": pct_below_threshold,
+        "alpha": alpha,
+        "interpretation": _get_interpretation(pct_below_threshold),
+    }
