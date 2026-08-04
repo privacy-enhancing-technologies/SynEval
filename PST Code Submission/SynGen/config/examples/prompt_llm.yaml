@@ -1,0 +1,16 @@
+# Prompt-Conditioned LLM Configuration Example
+
+method: prompt-llm
+
+# LLM Configuration  
+provider: openai  # openai or anthropic
+model: gpt-4o-mini
+temperature: 0.8
+
+# Generation Parameters
+batch_size: 10
+max_retries: 3
+retry_delay: 1.0
+
+# Random Seed (optional)
+random_seed: 42
