@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SynEval — Synthetic Data Evaluation Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --glass-bg: rgba(255,255,255,0.58);
+  --glass-border: rgba(255,255,255,0.42);
+  --text-primary: rgba(16,24,32,0.90);
+  --text-secondary: rgba(60,72,88,0.72);
+  --accent-a: #667eea;
+  --accent-b: #764ba2;
+  --shadow: 0 20px 50px rgba(15,23,42,0.22);
+  --radius: 22px;
+  --dim-fidelity: #667eea;
+  --dim-utility: #11998e;
+  --dim-diversity: #d53f8c;
+  --dim-privacy: #4facfe;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:radial-gradient(circle at 20% 10%,#f0f4ff 0%,#e5e9f8 50%,#dce0f0 100%);min-height:100vh;color:var(--text-primary);line-height:1.6;}
+body::before{content:"";position:fixed;inset:0;background:url("data:image/svg+xml,%3Csvg width='320' height='320' viewBox='0 0 320 320' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.10' fill-rule='evenodd'%3E%3Cpath d='M0 0h40v40H0zM80 80h40v40H80zM160 160h40v40h-40zM240 240h40v40h-40z'/%3E%3C/svg%3E") repeat;z-index:-1;}
+header{background:linear-gradient(120deg,rgba(255,255,255,0.7),rgba(255,255,255,0.4));backdrop-filter:blur(28px) saturate(160%);border-bottom:1px solid rgba(255,255,255,0.45);box-shadow:0 4px 40px rgba(90,107,143,0.18);padding:28px clamp(20px,8%,100px) 24px;display:flex;align-items:center;gap:18px;}
+header .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--accent-a),var(--accent-b));display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;font-weight:700;flex-shrink:0;}
+header h1{font-size:clamp(18px,3vw,24px);font-weight:700;letter-spacing:-.02em}
+header p{font-size:14px;color:var(--text-secondary);margin-top:2px}
+.wizard-bar{display:flex;align-items:center;justify-content:center;gap:0;padding:28px clamp(16px,6%,80px) 0;}
+.wstep{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;max-width:160px;position:relative;}
+.wstep:not(:last-child)::after{content:"";position:absolute;top:18px;left:calc(50% + 22px);right:calc(-50% + 22px);height:2px;background:rgba(102,126,234,0.2);transition:background .4s;z-index:0;}
+.wstep.done:not(:last-child)::after{background:var(--accent-a)}
+.wstep-dot{width:36px;height:36px;border-radius:50%;border:2px solid rgba(102,126,234,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--text-secondary);background:var(--glass-bg);backdrop-filter:blur(12px);transition:all .3s;position:relative;z-index:1;}
+.wstep.active .wstep-dot{border-color:var(--accent-a);background:linear-gradient(135deg,var(--accent-a),var(--accent-b));color:#fff;box-shadow:0 4px 16px rgba(102,126,234,0.4);}
+.wstep.done .wstep-dot{border-color:var(--accent-a);background:var(--accent-a);color:#fff}
+.wstep-label{font-size:12px;color:var(--text-secondary);font-weight:500;text-align:center}
+.wstep.active .wstep-label,.wstep.done .wstep-label{color:var(--accent-a);font-weight:600}
+.container{max-width:980px;margin:32px auto;padding:0 clamp(16px,5%,48px) 80px}
+.glass{background:var(--glass-bg);border-radius:var(--radius);border:1px solid var(--glass-border);box-shadow:var(--shadow);backdrop-filter:blur(22px);padding:clamp(24px,4vw,40px);}
+.step{display:none}.step.active{display:block;animation:fadeIn .35s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.step-header{margin-bottom:28px}
+.step-header h2{font-size:clamp(20px,3vw,26px);font-weight:700;letter-spacing:-.02em}
+.step-header p{color:var(--text-secondary);margin-top:6px;font-size:15px;max-width:620px}
+.upload-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;margin-bottom:28px}
+.drop-zone{border:2px dashed rgba(102,126,234,0.35);border-radius:16px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;background:rgba(255,255,255,0.4);position:relative;}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent-a);background:rgba(102,126,234,0.06)}
+.drop-zone.uploaded{border-color:#11998e;border-style:solid;background:rgba(17,153,142,0.06)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{font-size:32px;margin-bottom:10px}
+.drop-zone h3{font-size:15px;font-weight:600;margin-bottom:4px}
+.drop-zone .drop-hint{font-size:12px;color:var(--text-secondary)}
+.drop-zone .file-name{font-size:13px;color:#11998e;font-weight:600;margin-top:8px;word-break:break-all}
+.drop-zone .req-badge{position:absolute;top:10px;right:10px;background:rgba(102,126,234,0.15);color:var(--accent-a);font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+.drop-zone .opt-badge{position:absolute;top:10px;right:10px;background:rgba(100,100,100,0.10);color:var(--text-secondary);font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+.upload-info{background:rgba(255,255,255,0.5);border-radius:14px;border:1px solid rgba(255,255,255,0.5);padding:18px 22px;margin-bottom:24px;display:none;}
+.upload-info.visible{display:block;animation:fadeIn .3s}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:14px}
+.info-chip{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:10px;padding:10px 14px;}
+.info-chip .label{font-size:11px;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.info-chip .value{font-size:14px;font-weight:700;margin-top:2px;word-break:break-all}
+.col-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.tag{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600}
+.tag.text{background:rgba(102,126,234,0.15);color:var(--accent-a)}
+.tag.tabular{background:rgba(17,153,142,0.12);color:#0a7c72}
+.dim-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:32px}
+.dim-card{border-radius:16px;padding:20px;border:2px solid transparent;cursor:pointer;transition:all .25s;background:rgba(255,255,255,0.45);position:relative;user-select:none;}
+.dim-card.selected{border-color:var(--dc);background:var(--dcbg)}
+.dim-card .dim-icon{font-size:28px;margin-bottom:8px}
+.dim-card .dim-name{font-size:15px;font-weight:700}
+.dim-card .dim-desc{font-size:12px;color:var(--text-secondary);margin-top:4px}
+.dim-card .dim-check{position:absolute;top:12px;right:12px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(150,150,150,0.4);display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .2s;}
+.dim-card.selected .dim-check{background:var(--dc);border-color:var(--dc);color:#fff}
+.metrics-section{margin-bottom:24px}
+.metrics-section h3{font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:10px;}
+.dim-badge{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.metric-panel{background:rgba(255,255,255,0.42);border-radius:14px;border:1px solid rgba(255,255,255,0.5);margin-bottom:10px;overflow:hidden;}
+.metric-header{padding:14px 18px;display:flex;align-items:center;gap:14px;cursor:pointer}
+.metric-header:hover{background:rgba(255,255,255,0.3)}
+.metric-toggle{width:36px;height:20px;border-radius:10px;flex-shrink:0;position:relative;background:rgba(180,180,200,0.5);cursor:pointer;transition:background .2s;border:none;}
+.metric-toggle::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 4px rgba(0,0,0,0.25);}
+.metric-toggle.on{background:var(--tc,var(--accent-a))}.metric-toggle.on::after{left:calc(100% - 18px)}
+.metric-info{flex:1}
+.metric-info .mname{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px}
+.badge.core{background:rgba(102,126,234,0.15);color:var(--accent-a)}.badge.adv{background:rgba(120,120,120,0.12);color:var(--text-secondary)}
+.metric-info .mshort{font-size:12px;color:var(--text-secondary);margin-top:2px}
+.metric-expand-btn{font-size:18px;color:var(--text-secondary);transition:transform .2s;background:none;border:none;cursor:pointer;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.metric-detail{padding:0 18px;max-height:0;overflow:hidden;transition:max-height .3s ease,padding .2s;border-top:0 solid rgba(200,200,220,0.3);}
+.metric-detail.open{max-height:400px;padding:14px 18px 16px;border-top-width:1px}
+.metric-detail .detail-body{font-size:13px;color:var(--text-secondary);line-height:1.7}
+.metric-detail .what-good{margin-top:10px;padding:10px 14px;border-radius:10px;background:rgba(102,126,234,0.08);border-left:3px solid var(--accent-a);font-size:12px;color:var(--text-primary);}
+.what-good strong{color:var(--accent-a)}
+.adv-toggle-row{display:flex;align-items:center;gap:10px;padding:10px 4px;cursor:pointer;margin-bottom:6px;}
+.adv-toggle-row .adv-arrow{font-size:13px;transition:transform .2s;color:var(--text-secondary)}
+.adv-toggle-row.open .adv-arrow{transform:rotate(90deg)}
+.adv-label{font-size:13px;color:var(--text-secondary);font-weight:600}
+.adv-metrics{max-height:0;overflow:hidden;transition:max-height .35s ease}.adv-metrics.open{max-height:1000px}
+.utility-config{background:rgba(255,255,255,0.42);border-radius:14px;border:1px solid rgba(255,255,255,0.5);padding:20px;margin-bottom:20px;}
+.utility-config h4{font-size:14px;font-weight:700;margin-bottom:12px}
+.utility-config p{font-size:13px;color:var(--text-secondary);margin-bottom:14px}
+.col-picker{display:flex;flex-wrap:wrap;gap:8px}
+.col-chip{padding:5px 12px;border-radius:20px;border:1.5px solid rgba(180,180,200,0.5);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s;background:rgba(255,255,255,0.5);}
+.col-chip.sel-in{background:rgba(102,126,234,0.15);border-color:var(--accent-a);color:var(--accent-a)}
+.col-chip.sel-out{background:rgba(17,153,142,0.12);border-color:#11998e;color:#0a7c72}
+.picker-legend{display:flex;gap:16px;margin-bottom:10px;font-size:12px;color:var(--text-secondary)}
+.picker-legend span{display:flex;align-items:center;gap:5px}
+.picker-legend .dot{width:10px;height:10px;border-radius:50%}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 28px;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s;border:none;}
+.btn-primary{background:linear-gradient(135deg,var(--accent-a),var(--accent-b));color:#fff;box-shadow:0 6px 20px rgba(102,126,234,0.35);}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(102,126,234,0.45)}.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-ghost{background:rgba(255,255,255,0.5);color:var(--text-primary);border:1px solid rgba(200,200,220,0.5)}.btn-ghost:hover{background:rgba(255,255,255,0.7)}
+.btn-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:28px}
+.progress-card{padding:clamp(30px,5vw,50px)}
+.big-progress{margin:28px 0}
+.progress-bar-bg{height:16px;background:rgba(200,200,220,0.3);border-radius:999px;overflow:hidden}
+.progress-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent-a),var(--accent-b));transition:width .4s ease;position:relative;overflow:hidden;}
+.progress-bar-fill::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,0.35),transparent);animation:shimmer 1.6s infinite;}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.progress-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.progress-pct{font-size:clamp(28px,5vw,42px);font-weight:700;letter-spacing:-.03em;background:linear-gradient(135deg,var(--accent-a),var(--accent-b));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.progress-msg{font-size:14px;color:var(--text-secondary)}
+.time-row{display:flex;gap:24px;margin-top:10px;font-size:13px;color:var(--text-secondary)}
+.time-row strong{color:var(--text-primary)}
+.dim-status-list{display:flex;flex-direction:column;gap:10px;margin-top:24px}
+.dim-status-item{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:14px;background:rgba(255,255,255,0.42);border:1px solid rgba(255,255,255,0.5);transition:all .3s;}
+.dim-status-item.running{border-color:var(--dc);background:var(--dcbg)}
+.ds-icon{font-size:20px;width:28px;text-align:center;flex-shrink:0}
+.ds-name{font-size:14px;font-weight:600;flex:1}
+.ds-badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+.ds-badge.pending{background:rgba(180,180,200,0.2);color:var(--text-secondary)}.ds-badge.running{background:rgba(102,126,234,0.18);color:var(--accent-a)}.ds-badge.done{background:rgba(17,153,142,0.15);color:#0a7c72}.ds-badge.failed{background:rgba(229,62,62,0.12);color:#c53030}
+/* Results */
+.score-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin-bottom:36px;}
+.score-card{background:var(--glass-bg);border-radius:20px;border:1px solid var(--glass-border);box-shadow:var(--shadow);backdrop-filter:blur(20px);padding:28px 24px;transition:transform .3s,box-shadow .3s;}
+.score-card:hover{transform:translateY(-6px);box-shadow:0 30px 60px rgba(15,23,42,0.28)}
+.sc-icon{font-size:28px;margin-bottom:12px}
+.sc-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary);margin-bottom:8px}
+.sc-score{font-size:clamp(32px,4vw,42px);font-weight:700;letter-spacing:-.03em;margin-bottom:6px}
+.sc-score.ok{color:#2ecc71}.sc-score.warning{color:#ed8936}.sc-score.error{color:#e53e3e}.sc-score.info{color:var(--accent-a)}.sc-score.skipped{color:#a0aec0}
+.sc-status{font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;display:inline-block;margin-bottom:10px}
+.sc-status.ok{background:rgba(46,204,113,0.12);color:#1a9e51}.sc-status.warning{background:rgba(237,137,54,0.12);color:#b96a10}.sc-status.error{background:rgba(229,62,62,0.12);color:#c53030}.sc-status.skipped{background:rgba(160,174,192,0.12);color:#718096}
+.sc-detail{font-size:12px;color:var(--text-secondary);line-height:1.6}
+.progress-mini{height:6px;background:rgba(200,200,220,0.3);border-radius:999px;margin-top:12px;overflow:hidden}
+.progress-mini-fill{height:100%;border-radius:999px;transition:width .8s ease}
+.detail-collapse-btn{width:100%;text-align:left;padding:16px 20px;background:rgba(255,255,255,0.42);border:1px solid rgba(255,255,255,0.5);border-radius:14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:600;margin-bottom:10px;transition:background .2s;}
+.detail-collapse-btn:hover{background:rgba(255,255,255,0.6)}
+.detail-collapse-btn .arrow{transition:transform .2s;font-size:13px}
+.detail-collapse-btn.open .arrow{transform:rotate(90deg)}
+.detail-collapse-body{max-height:0;overflow:hidden;transition:max-height .4s ease}.detail-collapse-body.open{max-height:6000px}
+.detail-inner{padding:6px 4px 16px}
+/* Chart containers */
+.chart-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-bottom:20px}
+.chart-card{background:rgba(255,255,255,0.45);border-radius:14px;border:1px solid rgba(255,255,255,0.55);padding:20px;}
+.chart-full{background:rgba(255,255,255,0.45);border-radius:14px;border:1px solid rgba(255,255,255,0.55);padding:20px;margin-bottom:18px;}
+.chart-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary);margin-bottom:12px}
+.chart-subtitle{font-size:12px;color:var(--text-secondary);margin-top:-8px;margin-bottom:12px}
+/* Stat table */
+.stat-table{width:100%;border-collapse:collapse;font-size:13px}
+.stat-table th{text-align:left;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary);border-bottom:1px solid rgba(200,200,220,0.35);white-space:nowrap;}
+.stat-table td{padding:9px 10px;border-bottom:1px solid rgba(200,200,220,0.15);vertical-align:middle}
+.stat-table tr:last-child td{border-bottom:none}.stat-table tr:hover td{background:rgba(255,255,255,0.3)}
+.tv-good{color:#1a9e51;font-weight:700}.tv-warn{color:#b96a10;font-weight:700}.tv-bad{color:#c53030;font-weight:700}.tv-muted{color:var(--text-secondary)}
+.tbar{height:5px;background:rgba(200,200,220,0.3);border-radius:999px;margin-top:5px;overflow:hidden;width:100%}
+.tbar-fill{height:100%;border-radius:999px}
+/* Risk meter */
+.risk-meter{margin:4px 0 12px}
+.risk-labels-row{display:flex;margin-bottom:4px}
+.risk-label-item{font-size:10px;font-weight:700;text-align:center}
+.risk-label-item.safe{color:#1a9e51;flex:2}.risk-label-item.moderate{color:#b96a10;flex:3}.risk-label-item.high{color:#c53030;flex:5}
+.risk-track{position:relative;height:14px;border-radius:999px;overflow:visible;background:linear-gradient(90deg,#2ecc71 0% 20%,#ed8936 20% 50%,#e53e3e 50% 100%);}
+.risk-needle{position:absolute;top:-4px;width:4px;height:22px;background:rgba(16,24,32,0.85);border-radius:2px;transform:translateX(-50%);transition:left .9s ease;box-shadow:0 2px 6px rgba(0,0,0,0.3);}
+.risk-scale-row{display:flex;justify-content:space-between;font-size:10px;color:var(--text-secondary);margin-top:5px;padding:0 1px}
+.auc-display{text-align:center;margin-bottom:14px}
+.auc-number{font-size:40px;font-weight:700;letter-spacing:-.03em}
+.auc-number.ok{color:#1a9e51}.auc-number.warning{color:#b96a10}.auc-number.error{color:#c53030}
+.auc-label{font-size:11px;color:var(--text-secondary);margin-top:2px}
+/* Status grid */
+.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:16px 0}
+.status-cell{border-radius:12px;padding:14px 16px;border:1px solid;text-align:center}
+.status-cell.pass{background:rgba(46,204,113,0.08);border-color:rgba(46,204,113,0.3)}.status-cell.fail{background:rgba(229,62,62,0.08);border-color:rgba(229,62,62,0.3)}.status-cell.neutral{background:rgba(160,174,192,0.08);border-color:rgba(160,174,192,0.3)}
+.sc-clabel{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary);margin-bottom:6px}
+.sc-cval{font-size:18px;font-weight:700}
+.sc-csub{font-size:11px;color:var(--text-secondary);margin-top:3px}
+.pass .sc-cval{color:#1a9e51}.fail .sc-cval{color:#c53030}.neutral .sc-cval{color:#718096}
+/* Big stat */
+.big-stat-col{display:flex;flex-direction:column;gap:12px}
+.big-stat{text-align:center;padding:14px 18px;background:rgba(255,255,255,0.5);border-radius:12px;border:1px solid rgba(255,255,255,0.6);}
+.big-stat .bval{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.big-stat .blabel{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--text-secondary);margin-top:3px}
+.big-stat .bsub{font-size:11px;color:var(--text-secondary);margin-top:1px}
+/* Misc */
+.divider{height:1px;background:rgba(200,200,220,0.35);margin:24px 0}
+.section-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary);margin-bottom:14px}
+.interp-box{margin-top:12px;padding:12px 16px;border-radius:10px;font-size:13px;background:rgba(102,126,234,0.07);border-left:3px solid var(--accent-a);color:var(--text-primary);line-height:1.6}
+.warn-box{margin-top:10px;padding:12px 16px;border-radius:10px;font-size:13px;background:rgba(237,137,54,0.07);border-left:3px solid #ed8936;color:var(--text-primary);line-height:1.6}
+.danger-box{margin-top:10px;padding:12px 16px;border-radius:10px;font-size:13px;background:rgba(229,62,62,0.07);border-left:3px solid #e53e3e;color:var(--text-primary);line-height:1.6}
+.error-box{padding:14px 18px;border-radius:12px;font-size:13px;background:rgba(229,62,62,0.08);border-left:3px solid #e53e3e;color:#c53030}
+.skipped-box{padding:14px 18px;border-radius:12px;font-size:13px;background:rgba(160,174,192,0.1);border-left:3px solid #a0aec0;color:#718096}
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.detail-metric{background:rgba(255,255,255,0.5);border-radius:12px;border:1px solid rgba(255,255,255,0.55);padding:14px 16px}
+.dm-label{font-size:11px;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.dm-value{font-size:20px;font-weight:700;margin-top:3px}
+.dm-sub{font-size:11px;color:var(--text-secondary);margin-top:2px}
+select,input[type=text]{background:rgba(255,255,255,0.55);border:1.5px solid rgba(200,200,220,0.5);border-radius:10px;padding:9px 14px;font-size:14px;color:var(--text-primary);outline:none;font-family:inherit;width:100%;}
+select:focus,input[type=text]:focus{border-color:var(--accent-a)}
+.toast{position:fixed;bottom:28px;right:28px;z-index:9999;background:rgba(30,40,60,0.92);color:#fff;border-radius:12px;padding:14px 20px;font-size:14px;backdrop-filter:blur(12px);box-shadow:0 8px 30px rgba(0,0,0,0.3);max-width:320px;transform:translateY(20px);opacity:0;transition:all .3s;pointer-events:none;}
+.toast.show{transform:none;opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">S</div>
+  <div>
+    <h1>SynEval — Synthetic Data Evaluation Platform</h1>
+    <p>Upload datasets, configure metrics, and get a comprehensive evaluation report in one click</p>
+  </div>
+</header>
+
+<div class="wizard-bar">
+  <div class="wstep active" id="ws-1"><div class="wstep-dot">1</div><div class="wstep-label">Upload Data</div></div>
+  <div class="wstep" id="ws-2"><div class="wstep-dot">2</div><div class="wstep-label">Configure Metrics</div></div>
+  <div class="wstep" id="ws-3"><div class="wstep-dot">3</div><div class="wstep-label">Run Evaluation</div></div>
+  <div class="wstep" id="ws-4"><div class="wstep-dot">4</div><div class="wstep-label">View Report</div></div>
+</div>
+
+<div class="container">
+
+<!-- ══ STEP 1 — UPLOAD ══ -->
+<div class="step active glass" id="step-1">
+  <div class="step-header">
+    <h2>Upload Datasets</h2>
+    <p>Upload your original and synthetic datasets (CSV). The metadata file is optional — column types will be inferred automatically if omitted.</p>
+  </div>
+  <div class="upload-grid">
+    <div class="drop-zone" id="dz-orig"><span class="req-badge">Required</span><input type="file" id="file-orig" accept=".csv"/><div class="drop-icon">📊</div><h3>Original Dataset</h3><div class="drop-hint">Drag & drop CSV or click to browse</div><div class="file-name" id="fname-orig"></div></div>
+    <div class="drop-zone" id="dz-syn"><span class="req-badge">Required</span><input type="file" id="file-syn" accept=".csv"/><div class="drop-icon">✨</div><h3>Synthetic Dataset</h3><div class="drop-hint">Drag & drop CSV or click to browse</div><div class="file-name" id="fname-syn"></div></div>
+    <div class="drop-zone" id="dz-meta"><span class="opt-badge">Optional</span><input type="file" id="file-meta" accept=".json"/><div class="drop-icon">🗂️</div><h3>Metadata File</h3><div class="drop-hint">JSON format (optional)<br>Auto-generated if omitted</div><div class="file-name" id="fname-meta"></div></div>
+  </div>
+  <div class="upload-info" id="upload-info">
+    <div class="section-label">Detection Results</div>
+    <div class="info-grid">
+      <div class="info-chip"><div class="label">Original Rows</div><div class="value" id="inf-orig-rows">—</div></div>
+      <div class="info-chip"><div class="label">Synthetic Rows</div><div class="value" id="inf-syn-rows">—</div></div>
+      <div class="info-chip"><div class="label">Columns</div><div class="value" id="inf-cols">—</div></div>
+      <div class="info-chip"><div class="label">Metadata Source</div><div class="value" id="inf-meta-src">—</div></div>
+    </div>
+    <div style="margin-top:14px"><div class="section-label">Text Columns</div><div class="col-tags" id="tags-text"><span style="color:var(--text-secondary);font-size:13px">None detected</span></div></div>
+    <div style="margin-top:12px"><div class="section-label">Tabular Columns</div><div class="col-tags" id="tags-tab"><span style="color:var(--text-secondary);font-size:13px">None detected</span></div></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="btn-upload" disabled>Upload & Continue →</button>
+    <span id="upload-status" style="font-size:13px;color:var(--text-secondary)"></span>
+  </div>
+</div>
+
+<!-- ══ STEP 2 — CONFIGURE ══ -->
+<div class="step glass" id="step-2">
+  <div class="step-header">
+    <h2>Configure Evaluation Metrics</h2>
+    <p>Select which dimensions to evaluate. <b>Core</b> metrics are enabled by default; <b>Advanced</b> metrics are optional.</p>
+  </div>
+  <div class="section-label">Select Evaluation Dimensions</div>
+  <div class="dim-grid">
+    <div class="dim-card selected" id="dc-fidelity" style="--dc:#667eea;--dcbg:rgba(102,126,234,0.08)" data-dim="fidelity" onclick="toggleDim(this)"><div class="dim-check">✓</div><div class="dim-icon">🔬</div><div class="dim-name">Fidelity</div><div class="dim-desc">Do synthetic distributions match the original?</div></div>
+    <div class="dim-card selected" id="dc-utility" style="--dc:#11998e;--dcbg:rgba(17,153,142,0.08)" data-dim="utility" onclick="toggleDim(this)"><div class="dim-check">✓</div><div class="dim-icon">🎯</div><div class="dim-name">Utility</div><div class="dim-desc">Does synthetic data retain ML predictive value?</div></div>
+    <div class="dim-card selected" id="dc-diversity" style="--dc:#d53f8c;--dcbg:rgba(213,63,140,0.08)" data-dim="diversity" onclick="toggleDim(this)"><div class="dim-check">✓</div><div class="dim-icon">🌈</div><div class="dim-name">Diversity</div><div class="dim-desc">Does synthetic data cover a broad range of patterns?</div></div>
+    <div class="dim-card selected" id="dc-privacy" style="--dc:#4facfe;--dcbg:rgba(79,172,254,0.08)" data-dim="privacy" onclick="toggleDim(this)"><div class="dim-check">✓</div><div class="dim-icon">🔒</div><div class="dim-name">Privacy</div><div class="dim-desc">Does synthetic data expose real records?</div></div>
+  </div>
+  <div class="divider"></div>
+  <!-- FIDELITY -->
+  <div class="metrics-section" id="ms-fidelity">
+    <h3><span class="dim-badge" style="background:#667eea"></span>Fidelity Metrics</h3>
+    <div class="section-label" style="margin-bottom:10px">Core Metrics</div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#667eea" id="mt-diagnostic" onclick="toggleMetric(this,'fidelity','diagnostic')"></button><div class="metric-info"><div class="mname">Data Structure Diagnostic <span class="badge core">Core</span></div><div class="mshort">Validates format, null rates, and structural integrity</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">Validates numerical range validity, null-value proportions, and column type consistency via the SDV Diagnostic Report.</div><div class="what-good"><strong>Good result:</strong> Overall score close to 1.0.</div></div></div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#667eea" id="mt-quality" onclick="toggleMetric(this,'fidelity','quality')"></button><div class="metric-info"><div class="mname">Distribution Quality <span class="badge core">Core</span></div><div class="mshort">Per-column distribution shape and pairwise correlation similarity</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body"><b>Column Shapes</b> (TVD similarity) and <b>Column Pair Trends</b> (correlation preservation).</div><div class="what-good"><strong>Good result:</strong> Overall &gt; 0.8, Column Shapes &gt; 0.85, Pair Trends &gt; 0.7.</div></div></div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#667eea" id="mt-numerical_statistics" onclick="toggleMetric(this,'fidelity','numerical_statistics')"></button><div class="metric-info"><div class="mname">Numerical Statistics <span class="badge core">Core</span></div><div class="mshort">Mean, std, skewness, KL divergence, histogram similarity per column</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">Compares mean, median, std, skewness, kurtosis, value-range coverage, and KL divergence for each numeric column.</div><div class="what-good"><strong>Good result:</strong> Per-column fidelity &gt; 0.8, mean deviation &lt; 5%.</div></div></div>
+    <div class="adv-toggle-row" onclick="toggleAdv(this,'adv-fidelity')"><span class="adv-arrow">›</span><span class="adv-label">Advanced optional metrics</span></div>
+    <div class="adv-metrics" id="adv-fidelity"><div class="metric-panel"><div class="metric-header"><button class="metric-toggle" style="--tc:#667eea" id="mt-text" onclick="toggleMetric(this,'fidelity','text')"></button><div class="metric-info"><div class="mname">Text Content Analysis <span class="badge adv">Advanced</span></div><div class="mshort">Text length, keyword coverage, sentiment distribution</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">Compares text lengths, top TF-IDF keywords, and sentiment polarity (TextBlob) for text columns.</div><div class="what-good"><strong>Good result:</strong> High keyword overlap, length deviation &lt; 15%.</div></div></div></div>
+  </div>
+  <div class="divider"></div>
+  <!-- UTILITY -->
+  <div class="metrics-section" id="ms-utility">
+    <h3><span class="dim-badge" style="background:#11998e"></span>Utility Metrics</h3>
+    <div class="section-label" style="margin-bottom:10px">Core Metrics</div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#11998e" id="mt-tstr_accuracy" onclick="toggleMetric(this,'utility','tstr_accuracy')"></button><div class="metric-info"><div class="mname">TSTR Predictive Accuracy <span class="badge core">Core</span></div><div class="mshort">Train on Synthetic, Test on Real — measures ML substitutability</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">Trains models on real and synthetic separately, tests both on a real held-out set. <b>Performance ratio</b> = synthetic ÷ real score.</div><div class="what-good"><strong>Good result:</strong> Ratio &gt; 0.85. Below 0.70 indicates significant information loss.</div></div></div>
+    <div class="utility-config" id="util-col-config">
+      <h4>Configure Prediction Task Columns</h4>
+      <p>Click to assign columns — <span style="color:var(--accent-a);font-weight:600">blue = input features</span>, <span style="color:#0a7c72;font-weight:600">green = prediction target</span>:</p>
+      <div class="picker-legend"><span><span class="dot" style="background:var(--accent-a)"></span>Input features</span><span><span class="dot" style="background:#11998e"></span>Target (single)</span></div>
+      <div class="col-picker" id="col-picker-container"><span style="font-size:13px;color:var(--text-secondary)">Upload data first</span></div>
+    </div>
+    <div class="adv-toggle-row" onclick="toggleAdv(this,'adv-utility')"><span class="adv-arrow">›</span><span class="adv-label">Advanced optional metrics</span></div>
+    <div class="adv-metrics" id="adv-utility"><div class="metric-panel"><div class="metric-header"><button class="metric-toggle" style="--tc:#11998e" id="mt-correlation_analysis" onclick="toggleMetric(this,'utility','correlation_analysis')"></button><div class="metric-info"><div class="mname">Cross-Modal Correlation Analysis <span class="badge adv">Advanced</span></div><div class="mshort">Sentiment–rating, keyword–category correlations</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">Spearman correlation between TextBlob polarity and rating; TF-IDF + χ² keyword associations; PII leakage detection.</div><div class="what-good"><strong>Good result:</strong> Correlation difference &lt; 0.1 between real and synthetic.</div></div></div></div>
+  </div>
+  <div class="divider"></div>
+  <!-- DIVERSITY -->
+  <div class="metrics-section" id="ms-diversity">
+    <h3><span class="dim-badge" style="background:#d53f8c"></span>Diversity Metrics</h3>
+    <div class="section-label" style="margin-bottom:10px">Core Metrics</div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#d53f8c" id="mt-tabular_diversity" onclick="toggleMetric(this,'diversity','tabular_diversity')"></button><div class="metric-info"><div class="mname">Tabular Diversity <span class="badge core">Core</span></div><div class="mshort">Category coverage, duplicate rate, Shannon entropy — detects mode collapse</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body"><b>Coverage</b> (all original categories present?), <b>Uniqueness</b> (duplicate row rate), <b>Entropy</b> (synthetic vs real Shannon entropy ratio).</div><div class="what-good"><strong>Good result:</strong> Coverage &gt; 90%, duplicates &lt; 5%, entropy ratio &gt; 0.9.</div></div></div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#d53f8c" id="mt-text_diversity" onclick="toggleMetric(this,'diversity','text_diversity')"></button><div class="metric-info"><div class="mname">Text Diversity <span class="badge core">Core</span></div><div class="mshort">Vocabulary richness, semantic variety, sentiment coverage</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body"><b>Lexical</b> (n-gram TTR), <b>Semantic</b> (sentence-BERT cluster coverage), <b>Sentiment</b> diversity.</div><div class="what-good"><strong>Good result:</strong> 1-gram TTR &gt; 0.4, semantic coverage &gt; 0.75.</div></div></div>
+  </div>
+  <div class="divider"></div>
+  <!-- PRIVACY -->
+  <div class="metrics-section" id="ms-privacy">
+    <h3><span class="dim-badge" style="background:#4facfe"></span>Privacy Metrics</h3>
+    <div class="section-label" style="margin-bottom:10px">Core Metrics</div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#4facfe" id="mt-exact_matches" onclick="toggleMetric(this,'privacy','exact_matches')"></button><div class="metric-info"><div class="mname">Exact Match Detection <span class="badge core">Core</span></div><div class="mshort">Checks if any synthetic row is identical to a real row</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">Direct detection of copy rows between synthetic and real data.</div><div class="what-good"><strong>Good result:</strong> Match rate = 0%, risk = Low.</div></div></div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#4facfe" id="mt-membership_inference" onclick="toggleMetric(this,'privacy','membership_inference')"></button><div class="metric-info"><div class="mname">Membership Inference Attack <span class="badge core">Core</span></div><div class="mshort">Classifier tries to distinguish synthetic from real — AUC near 0.5 is ideal</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">A Random Forest classifier distinguishes synthetic from real. AUC ≈ 0.5 = indistinguishable = low risk.</div><div class="what-good"><strong>Good result:</strong> AUC 0.50–0.60. Above 0.75 indicates significant divergence.</div></div></div>
+    <div class="metric-panel"><div class="metric-header"><button class="metric-toggle on" style="--tc:#4facfe" id="mt-tabular_privacy" onclick="toggleMetric(this,'privacy','tabular_privacy')"></button><div class="metric-info"><div class="mname">Distance-Based Privacy (DCR / NNDR / IMS) <span class="badge core">Core</span></div><div class="mshort">Nearest-neighbour distances detect memorised real records</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body"><b>DCR</b> (Distance to Closest Record), <b>NNDR</b> (Neighbour Distance Ratio), <b>IMS</b> (Identity Matching Score) — detect over-memorisation.</div><div class="what-good"><strong>Good result:</strong> All three passed.</div></div></div>
+    <div class="adv-toggle-row" onclick="toggleAdv(this,'adv-privacy')"><span class="adv-arrow">›</span><span class="adv-label">Advanced optional metrics</span></div>
+    <div class="adv-metrics" id="adv-privacy">
+      <div class="metric-panel"><div class="metric-header"><button class="metric-toggle" style="--tc:#4facfe" id="mt-text_privacy" onclick="toggleMetric(this,'privacy','text_privacy')"></button><div class="metric-info"><div class="mname">Text Privacy Detection (NER) <span class="badge adv">Advanced</span></div><div class="mshort">Identifies personal information in text columns</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">NER scans text for PERSON, LOC, ORG, email, phone entities. Compares entity density between real and synthetic.</div><div class="what-good"><strong>Good result:</strong> Synthetic entity density lower than real (de-identified).</div></div></div>
+      <div class="metric-panel"><div class="metric-header"><button class="metric-toggle" style="--tc:#4facfe" id="mt-anonymeter" onclick="toggleMetric(this,'privacy','anonymeter')"></button><div class="metric-info"><div class="mname">Anonymisation Risk (Anonymeter) <span class="badge adv">Advanced</span></div><div class="mshort">Inference, linkability, and singling-out risk assessment</div></div><button class="metric-expand-btn" onclick="expandMetric(this)">›</button></div><div class="metric-detail"><div class="detail-body">Anonymeter framework evaluates attribute inference, linkability, and singling-out attacks.</div><div class="what-good"><strong>Good result:</strong> Overall risk &lt; 0.3, level = Low.</div></div></div>
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-ghost" onclick="goStep(1)">← Back</button>
+    <button class="btn btn-primary" id="btn-run" onclick="startEval()">Run Evaluation →</button>
+    <span id="run-err" style="font-size:13px;color:#e53e3e"></span>
+  </div>
+</div>
+
+<!-- ══ STEP 3 — PROGRESS ══ -->
+<div class="step glass progress-card" id="step-3">
+  <div class="step-header"><h2>Evaluation Running…</h2><p>Please wait — runtime depends on dataset size and selected metrics.</p></div>
+  <div class="big-progress">
+    <div class="progress-label"><span class="progress-pct" id="prog-pct">0%</span><span class="progress-msg" id="prog-msg">Initialising…</span></div>
+    <div class="progress-bar-bg"><div class="progress-bar-fill" id="prog-bar" style="width:0%"></div></div>
+    <div class="time-row"><span>Elapsed: <strong id="prog-elapsed">0s</strong></span><span id="prog-remaining-wrap" style="display:none">Est. remaining: <strong id="prog-remaining">—</strong></span></div>
+  </div>
+  <div class="section-label">Dimension Status</div>
+  <div class="dim-status-list" id="dim-status-list"></div>
+</div>
+
+<!-- ══ STEP 4 — RESULTS ══ -->
+<div class="step" id="step-4">
+  <div class="glass" style="margin-bottom:24px">
+    <div class="step-header" style="margin-bottom:20px">
+      <h2>Evaluation Report</h2>
+      <p style="color:var(--text-secondary);margin-top:6px;font-size:15px" id="res-subtitle">Evaluation complete</p>
+    </div>
+    <div class="score-cards" id="score-cards"></div>
+  </div>
+  <div id="detail-sections"></div>
+  <div class="btn-row" style="margin-top:8px">
+    <button class="btn btn-ghost" onclick="location.reload()">New Evaluation</button>
+    <button class="btn btn-primary" onclick="downloadJSON()">Download JSON Report</button>
+  </div>
+</div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── Chart.js global defaults ───
+if (window.Chart) {
+  Chart.defaults.font.family = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = 'rgba(60,72,88,0.75)';
+}
+
+const chartReg = {};
+function mkChart(id, cfg) {
+  if (chartReg[id]) { try { chartReg[id].destroy(); } catch(_){} delete chartReg[id]; }
+  const el = document.getElementById(id);
+  if (!el) return null;
+  cfg.options = cfg.options || {};
+  cfg.options.plugins = cfg.options.plugins || {};
+  if (cfg.options.plugins.legend === undefined) cfg.options.plugins.legend = { display: false };
+  cfg.options.plugins.tooltip = cfg.options.plugins.tooltip || {
+    backgroundColor:'rgba(16,24,40,0.90)', titleColor:'#fff',
+    bodyColor:'rgba(255,255,255,0.80)', padding:10, cornerRadius:8, boxPadding:4,
+  };
+  cfg.options.animation = cfg.options.animation ?? { duration:700, easing:'easeOutQuart' };
+  chartReg[id] = new Chart(el.getContext('2d'), cfg);
+  return chartReg[id];
+}
+const GRID = { color:'rgba(200,200,220,0.22)', drawBorder:false };
+const NOGRID = { display:false };
+const SCALE01 = { min:0, max:1, grid:GRID, ticks:{ stepSize:0.25, callback:v=>v.toFixed(2) } };
+const TIP_CB_SCORE = { callbacks:{ label:ctx=>` Score: ${ctx.raw.toFixed(3)}` } };
+
+function colorByScore(v) {
+  return v==null?'rgba(160,174,192,0.5)':v>=0.8?'rgba(46,204,113,0.75)':v>=0.6?'rgba(237,137,54,0.75)':'rgba(229,62,62,0.75)';
+}
+
+// ─── App State ───
+let sessionId=null,taskId=null,allColumns=[],textColumns=[],tabColumns=[];
+let selectedDims=new Set(['fidelity','utility','diversity','privacy']);
+let evalResults=null;
+const metricsState={
+  fidelity:new Set(['diagnostic','quality','numerical_statistics']),
+  utility:new Set(['tstr_accuracy']),
+  diversity:new Set(['tabular_diversity','text_diversity']),
+  privacy:new Set(['exact_matches','membership_inference','tabular_privacy']),
+};
+const allMetrics={
+  fidelity:['diagnostic','quality','numerical_statistics','text'],
+  utility:['tstr_accuracy','correlation_analysis'],
+  diversity:['tabular_diversity','text_diversity'],
+  privacy:['exact_matches','membership_inference','tabular_privacy','text_privacy','anonymeter'],
+};
+let utilityInputCols=new Set(),utilityOutputCol=null;
+
+// ─── Navigation ───
+function goStep(n){
+  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  document.getElementById('step-'+n).classList.add('active');
+  document.querySelectorAll('.wstep').forEach((ws,i)=>{ws.classList.toggle('active',i+1===n);ws.classList.toggle('done',i+1<n);});
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ─── Upload ───
+function setupDrop(dzId,inputId,labelId){
+  const dz=document.getElementById(dzId),input=document.getElementById(inputId);
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files[0]){input.files=e.dataTransfer.files;handleFileChange(input,dzId,labelId);}});
+  input.addEventListener('change',()=>handleFileChange(input,dzId,labelId));
+}
+function handleFileChange(input,dzId,labelId){if(!input.files[0])return;document.getElementById(labelId).textContent=input.files[0].name;document.getElementById(dzId).classList.add('uploaded');checkUploadReady();}
+function checkUploadReady(){document.getElementById('btn-upload').disabled=!(document.getElementById('file-orig').files[0]&&document.getElementById('file-syn').files[0]);}
+setupDrop('dz-orig','file-orig','fname-orig');
+setupDrop('dz-syn','file-syn','fname-syn');
+setupDrop('dz-meta','file-meta','fname-meta');
+document.getElementById('btn-upload').addEventListener('click',doUpload);
+
+async function doUpload(){
+  const btn=document.getElementById('btn-upload'),status=document.getElementById('upload-status');
+  btn.disabled=true;btn.textContent='Uploading…';status.textContent='';
+  const fd=new FormData();
+  fd.append('original',document.getElementById('file-orig').files[0]);
+  fd.append('synthetic',document.getElementById('file-syn').files[0]);
+  const meta=document.getElementById('file-meta').files[0];
+  if(meta)fd.append('metadata',meta);
+  try{
+    const res=await fetch('/api/upload',{method:'POST',body:fd});
+    const data=await res.json();
+    if(!data.success)throw new Error(data.error);
+    sessionId=data.session_id;allColumns=data.columns||[];textColumns=data.text_columns||[];tabColumns=data.tabular_columns||[];
+    document.getElementById('inf-orig-rows').textContent=(data.orig_shape||[0])[0].toLocaleString()+' rows';
+    document.getElementById('inf-syn-rows').textContent=(data.syn_shape||[0])[0].toLocaleString()+' rows';
+    document.getElementById('inf-cols').textContent=allColumns.length;
+    document.getElementById('inf-meta-src').textContent=data.metadata_generated?'Auto-generated':'Uploaded';
+    document.getElementById('tags-text').innerHTML=textColumns.length?textColumns.map(c=>`<span class="tag text">${c}</span>`).join(''):'<span style="color:var(--text-secondary);font-size:13px">None detected</span>';
+    document.getElementById('tags-tab').innerHTML=tabColumns.length?tabColumns.map(c=>`<span class="tag tabular">${c}</span>`).join(''):'<span style="color:var(--text-secondary);font-size:13px">None detected</span>';
+    document.getElementById('upload-info').classList.add('visible');
+    buildColPicker();
+    setTimeout(()=>goStep(2),500);
+    showToast('Files uploaded successfully!');
+  }catch(e){
+    status.textContent='Upload failed: '+e.message;
+    btn.disabled=false;btn.textContent='Upload & Continue →';
+  }
+}
+
+function buildColPicker(){
+  const c=document.getElementById('col-picker-container');
+  if(!allColumns.length)return;
+  c.innerHTML=allColumns.map(col=>`<span class="col-chip" data-col="${col}" onclick="toggleColPick(this,'${col}')">${col}</span>`).join('');
+}
+function toggleColPick(el,col){
+  if(el.classList.contains('sel-out')){el.classList.remove('sel-out');utilityOutputCol=null;}
+  else if(el.classList.contains('sel-in')){el.classList.remove('sel-in');el.classList.add('sel-out');utilityInputCols.delete(col);if(utilityOutputCol){document.querySelector(`[data-col="${utilityOutputCol}"]`)?.classList.remove('sel-out');}utilityOutputCol=col;}
+  else{el.classList.add('sel-in');utilityInputCols.add(col);}
+}
+function toggleDim(card){const dim=card.dataset.dim;if(selectedDims.has(dim)){selectedDims.delete(dim);card.classList.remove('selected');}else{selectedDims.add(dim);card.classList.add('selected');}const ms=document.getElementById('ms-'+dim);if(ms)ms.style.display=selectedDims.has(dim)?'':'none';}
+function toggleMetric(btn,dim,metric){btn.classList.toggle('on');if(btn.classList.contains('on'))metricsState[dim].add(metric);else metricsState[dim].delete(metric);}
+function expandMetric(btn){const detail=btn.closest('.metric-panel').querySelector('.metric-detail');const open=detail.classList.contains('open');detail.classList.toggle('open',!open);btn.style.transform=open?'':'rotate(90deg)';}
+function toggleAdv(row,id){row.classList.toggle('open');document.getElementById(id).classList.toggle('open');}
+
+// ─── Start evaluation ───
+function startEval(){
+  const errEl=document.getElementById('run-err');errEl.textContent='';
+  if(selectedDims.size===0){errEl.textContent='Select at least one dimension.';return;}
+  if(!sessionId){errEl.textContent='Upload data first.';return;}
+  const dims=[...selectedDims];
+  if(dims.includes('utility')&&(utilityInputCols.size===0||!utilityOutputCol)){errEl.textContent='Utility requires input feature columns and a target column.';return;}
+  const metricsConfig={};
+  for(const dim of dims){const all=allMetrics[dim]||[],sel=[...(metricsState[dim]||[])];metricsConfig[dim]=sel.length===all.length?null:sel;}
+  const dimIcons={fidelity:'🔬',utility:'🎯',diversity:'🌈',privacy:'🔒'};
+  const dimNames={fidelity:'Fidelity',utility:'Utility',diversity:'Diversity',privacy:'Privacy'};
+  document.getElementById('dim-status-list').innerHTML=dims.map(d=>`<div class="dim-status-item" id="dsi-${d}" style="--dc:var(--dim-${d});--dcbg:rgba(79,172,254,0.06)"><span class="ds-icon">${dimIcons[d]}</span><span class="ds-name">${dimNames[d]}</span><span class="ds-badge pending" id="dsb-${d}">Pending</span></div>`).join('');
+  goStep(3);
+  fetch('/api/evaluate',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({session_id:sessionId,dimensions:dims,metrics_config:metricsConfig,
+      utility_config:{input_columns:[...utilityInputCols],output_columns:[utilityOutputCol]}})
+  }).then(r=>r.json()).then(data=>{
+    if(!data.success){showToast('Failed to start: '+data.error,'error');return;}
+    taskId=data.task_id;listenProgress(taskId);
+  }).catch(e=>showToast('Network error: '+e.message,'error'));
+}
+
+// ─── Progress ───
+function listenProgress(tid){
+  const es=new EventSource('/api/progress/'+tid);
+  es.onmessage=e=>{const d=JSON.parse(e.data);updateProgress(d);if(d.done){es.close();if(d.error)showToast('Failed: '+d.error,'error');else{evalResults=d.results;setTimeout(()=>showResults(d.results),600);}}};
+  es.onerror=()=>{es.close();pollResults(tid);};
+}
+function pollResults(tid){
+  const iv=setInterval(async()=>{
+    const r=await fetch('/api/results/'+tid);const d=await r.json();
+    if(d.status==='completed'){clearInterval(iv);updateProgress({progress:100,message:'Complete!',dimension_status:{}});evalResults=d.results;setTimeout(()=>showResults(d.results),600);}
+    else if(d.status==='failed'){clearInterval(iv);showToast('Failed: '+d.error,'error');}
+  },1500);
+}
+function updateProgress(d){
+  const pct=Math.max(0,d.progress||0);
+  document.getElementById('prog-pct').textContent=pct+'%';
+  document.getElementById('prog-bar').style.width=pct+'%';
+  if(d.message)document.getElementById('prog-msg').textContent=d.message;
+  if(d.elapsed!=null)document.getElementById('prog-elapsed').textContent=fmtTime(d.elapsed);
+  if(d.remaining!=null){document.getElementById('prog-remaining-wrap').style.display='';document.getElementById('prog-remaining').textContent=fmtTime(d.remaining);}
+  const labels={pending:'Pending',running:'Running…',done:'Done',failed:'Failed'};
+  for(const[dim,st]of Object.entries(d.dimension_status||{})){
+    const badge=document.getElementById('dsb-'+dim),item=document.getElementById('dsi-'+dim);
+    if(!badge)continue;badge.textContent=labels[st]||st;badge.className='ds-badge '+st;
+    if(item)item.classList.toggle('running',st==='running');
+  }
+}
+function fmtTime(s){if(s==null||s<0)return '—';const m=Math.floor(s/60),sec=Math.round(s%60);return m>0?`${m}m ${sec}s`:`${sec}s`;}
+
+// ═══════════════════════════════════════════
+//  RESULTS
+// ═══════════════════════════════════════════
+function showResults(results){
+  goStep(4);
+  if(!results){document.getElementById('score-cards').innerHTML='<div class="error-box">No results available.</div>';return;}
+  const dims=Object.keys(results);
+  document.getElementById('res-subtitle').textContent=`${dims.length} dimension${dims.length!==1?'s':''} evaluated`;
+  document.getElementById('score-cards').innerHTML=dims.map(d=>renderScoreCard(d,results[d])).join('');
+  document.getElementById('detail-sections').innerHTML=dims.map(d=>renderDetailShell(d,results[d])).join('');
+  requestAnimationFrame(()=>{
+    for(const[dim,data]of Object.entries(results)){
+      if(data&&!data.error&&!data.skipped){try{initDimCharts(dim,data);}catch(e){console.warn('chart',dim,e);}}
+    }
+  });
+}
+
+// ── Score card ──
+function renderScoreCard(dim,data){
+  const meta={fidelity:{icon:'🔬',name:'Fidelity',color:'var(--dim-fidelity)'},utility:{icon:'🎯',name:'Utility',color:'var(--dim-utility)'},diversity:{icon:'🌈',name:'Diversity',color:'var(--dim-diversity)'},privacy:{icon:'🔒',name:'Privacy',color:'var(--dim-privacy)'}}[dim]||{icon:'📊',name:dim,color:'var(--accent-a)'};
+  if(data?.error)return `<div class="score-card"><div class="sc-icon">${meta.icon}</div><div class="sc-title">${meta.name}</div><div class="sc-score error">ERR</div><div class="sc-status error">Error</div><div class="sc-detail">${escHtml(data.error.slice(0,100))}</div></div>`;
+  const{score,cls,statusTxt,detail,progress}=extractScore(dim,data);
+  return `<div class="score-card"><div class="sc-icon">${meta.icon}</div><div class="sc-title">${meta.name}</div><div class="sc-score ${cls}">${score}</div><div class="sc-status ${cls}">${statusTxt}</div><div class="sc-detail">${detail}</div>${progress!=null?`<div class="progress-mini"><div class="progress-mini-fill" style="width:${progress}%;background:${meta.color}"></div></div>`:''}</div>`;
+}
+function extractScore(dim,data){
+  if(!data||data.skipped)return{score:'Skipped',cls:'skipped',statusTxt:'Not Run',detail:'Not selected.',progress:null};
+  if(dim==='fidelity'){let s=data.quality?.Overall?.score??data.diagnostic?.Overall?.score??null;if(s==null)return{score:'N/A',cls:'info',statusTxt:'Done',detail:'See details below',progress:null};const p=Math.round(s*100),cls=p>=80?'ok':p>=60?'warning':'error';return{score:p+'%',cls,statusTxt:p>=80?'Excellent':p>=60?'Good':'Needs Work',detail:'Combined distribution similarity',progress:p};}
+  if(dim==='utility'){const t=data.tstr_accuracy||data;const ra=t?.real_data_model?.accuracy??t?.real_data_model?.r2,sa=t?.synthetic_data_model?.accuracy??t?.synthetic_data_model?.r2;if(ra==null||sa==null)return{score:'N/A',cls:'info',statusTxt:'Done',detail:'See details below',progress:null};const ratio=ra>0?Math.round((sa/ra)*100):0,cls=ratio>=85?'ok':ratio>=70?'warning':'error';return{score:ratio+'%',cls,statusTxt:ratio>=85?'High Utility':ratio>=70?'Moderate':'Low Utility',detail:'Synthetic ÷ real model score',progress:ratio};}
+  if(dim==='diversity'){const tab=data.tabular_diversity||{};const ent=tab.entropy_metrics?.dataset_entropy?.entropy_ratio,cov=tab.coverage?Object.values(tab.coverage).reduce((a,b)=>a+b,0)/Object.values(tab.coverage).length:null;const ratio=ent??cov;if(ratio==null)return{score:'N/A',cls:'info',statusTxt:'Done',detail:'See details below',progress:null};const p=Math.round(Math.min(ratio,1)*100),cls=p>=90?'ok':p>=70?'warning':'error';return{score:p+'%',cls,statusTxt:p>=90?'Diverse':p>=70?'Moderate':'Low',detail:ent!=null?'Entropy ratio':'Coverage ratio',progress:p};}
+  if(dim==='privacy'){const mi=data.membership_inference||{},auc=mi.distinguishability_auc;if(auc==null){const risk=data.exact_matches?.risk_level||'Unknown';return{score:risk,cls:risk==='Low'?'ok':risk==='Medium'?'warning':'error',statusTxt:'Risk Level',detail:'Exact match detection',progress:null};}const p=Math.round((1-auc)*100),cls=auc<=0.60?'ok':auc<=0.75?'warning':'error';return{score:'AUC '+auc.toFixed(3),cls,statusTxt:auc<=0.60?'Low Risk':auc<=0.75?'Medium Risk':'High Risk',detail:`Privacy fidelity: ${p}%`,progress:p};}
+  return{score:'?',cls:'info',statusTxt:'Done',detail:'',progress:null};
+}
+
+// ── Detail shell ──
+function renderDetailShell(dim,data){
+  const meta={fidelity:{icon:'🔬',name:'Fidelity'},utility:{icon:'🎯',name:'Utility'},diversity:{icon:'🌈',name:'Diversity'},privacy:{icon:'🔒',name:'Privacy'}}[dim]||{icon:'📊',name:dim};
+  let inner='';
+  if(!data||data.error)inner=`<div class="error-box">${data?.error?escHtml(data.error):'No results returned'}</div>`;
+  else if(dim==='fidelity')inner=renderFidelityHTML(data);
+  else if(dim==='utility')inner=renderUtilityHTML(data);
+  else if(dim==='diversity')inner=renderDiversityHTML(data);
+  else if(dim==='privacy')inner=renderPrivacyHTML(data);
+  return `<div class="glass detail-section" style="margin-bottom:20px"><button class="detail-collapse-btn open" onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')"><span>${meta.icon} ${meta.name} — Detailed Results</span><span class="arrow">›</span></button><div class="detail-collapse-body open"><div class="detail-inner">${inner}</div></div></div>`;
+}
+
+// ══ FIDELITY ══
+function renderFidelityHTML(data){
+  const numStats=data.numerical_statistics||{};
+  const numCols=Object.keys(numStats);
+  const colH=Math.max(90,numCols.length*44);
+  let html=`<div class="chart-row">
+    <div class="chart-card"><div class="chart-title">Method Score Overview</div><div style="position:relative;height:130px"><canvas id="chart-fid-overview"></canvas></div></div>
+    ${data.quality?`<div class="chart-card"><div class="chart-title">Distribution Quality Breakdown</div><div style="position:relative;height:130px"><canvas id="chart-fid-quality"></canvas></div></div>`:''}
+  </div>`;
+  if(numCols.length){
+    html+=`<div class="chart-full"><div class="chart-title">Per-Column Numerical Fidelity Score</div><div class="chart-subtitle">Green ≥ 0.80 &nbsp;·&nbsp; Orange ≥ 0.60 &nbsp;·&nbsp; Red &lt; 0.60</div><div style="position:relative;height:${colH}px"><canvas id="chart-fid-columns"></canvas></div></div>`;
+    html+=`<div class="chart-full"><div class="chart-title">Numerical Statistics Detail</div><table class="stat-table"><thead><tr><th>Column</th><th>Fidelity Score</th><th>Mean Δ</th><th>Std Δ</th><th>Interpretation</th></tr></thead><tbody>`;
+    for(const col of numCols){
+      const cd=numStats[col]||{};
+      const s=cd.overall_fidelity_score,md=cd.mean_relative_diff,sd=cd.std_relative_diff,interp=cd.fidelity_interpretation||'—';
+      const sCls=s>=0.8?'tv-good':s>=0.6?'tv-warn':'tv-bad';
+      const mdCls=md==null?'':(Math.abs(md)<=0.05?'tv-good':Math.abs(md)<=0.15?'tv-warn':'tv-bad');
+      const sdCls=sd==null?'':(Math.abs(sd)<=0.1?'tv-good':Math.abs(sd)<=0.25?'tv-warn':'tv-bad');
+      html+=`<tr><td><b>${escHtml(col)}</b></td><td><span class="${sCls}">${s!=null?s.toFixed(3):'—'}</span><div class="tbar"><div class="tbar-fill" style="width:${(s||0)*100}%;background:${s>=0.8?'#2ecc71':s>=0.6?'#ed8936':'#e53e3e'}"></div></div></td><td class="${mdCls}">${md!=null?(md>=0?'+':'')+( md*100).toFixed(1)+'%':'—'}</td><td class="${sdCls}">${sd!=null?(sd>=0?'+':'')+(sd*100).toFixed(1)+'%':'—'}</td><td class="tv-muted">${escHtml(interp)}</td></tr>`;
+    }
+    html+=`</tbody></table></div>`;
+  }
+  if(data.text){
+    html+=`<div class="chart-full"><div class="chart-title">Text Content Analysis</div><div class="detail-grid">`;
+    for(const[col,cd]of Object.entries(data.text)){if(!cd)continue;const om=cd.length_stats?.original_mean,sm=cd.length_stats?.synthetic_mean;html+=chip(col+' Avg Length',om!=null?`${fmt(om,1)} → ${fmt(sm,1)}`:'N/A','Real → Synthetic');}
+    html+=`</div></div>`;
+  }
+  return html;
+}
+function initFidelityCharts(data){
+  const labels=[],scores=[];
+  const diagScore=data.diagnostic?.Overall?.score??data.diagnostic?.['Data Validity'];
+  if(diagScore!=null){labels.push('Diagnostic');scores.push(diagScore);}
+  const qualScore=data.quality?.Overall?.score;
+  if(qualScore!=null){labels.push('Quality');scores.push(qualScore);}
+  if(data.numerical_statistics){const vals=Object.values(data.numerical_statistics).map(c=>c?.overall_fidelity_score).filter(v=>v!=null);if(vals.length){labels.push('Numerical Stats');scores.push(vals.reduce((a,b)=>a+b,0)/vals.length);}}
+  if(labels.length)mkChart('chart-fid-overview',{type:'bar',data:{labels,datasets:[{data:scores,backgroundColor:scores.map(colorByScore),borderRadius:8,borderSkipped:false}]},options:{maintainAspectRatio:false,indexAxis:'y',scales:{x:{...SCALE01},y:{grid:NOGRID}},plugins:{legend:{display:false},...TIP_CB_SCORE}}});
+  if(data.quality){
+    const ql=['Column Shapes','Column Pair Trends','Overall'],qv=[data.quality['Column Shapes']??0,data.quality['Column Pair Trends']??0,data.quality?.Overall?.score??0];
+    mkChart('chart-fid-quality',{type:'bar',data:{labels:ql,datasets:[{data:qv,backgroundColor:['rgba(102,126,234,0.72)','rgba(118,75,162,0.72)','rgba(102,126,234,0.90)'],borderRadius:8,borderSkipped:false}]},options:{maintainAspectRatio:false,scales:{y:{...SCALE01},x:{grid:NOGRID}},plugins:{legend:{display:false},...TIP_CB_SCORE}}});
+  }
+  const numStats=data.numerical_statistics||{};
+  const cols=Object.keys(numStats);
+  if(cols.length){const sc=cols.map(c=>numStats[c]?.overall_fidelity_score??0);mkChart('chart-fid-columns',{type:'bar',data:{labels:cols,datasets:[{data:sc,backgroundColor:sc.map(colorByScore),borderRadius:6,borderSkipped:false}]},options:{maintainAspectRatio:false,indexAxis:'y',scales:{x:{...SCALE01},y:{grid:NOGRID,ticks:{font:{size:11}}}},plugins:{legend:{display:false},...TIP_CB_SCORE}}});}
+}
+
+// ══ UTILITY ══
+function renderUtilityHTML(data){
+  const t=data.tstr_accuracy||data;
+  const ra=t?.real_data_model?.accuracy??t?.real_data_model?.r2;
+  const sa=t?.synthetic_data_model?.accuracy??t?.synthetic_data_model?.r2;
+  const ratio=ra&&sa&&ra>0?sa/ra:null;
+  const metric=t?.real_data_model?.metric||t?.task_type||'score';
+  let interp='';
+  if(ratio!=null){if(ratio>0.95)interp='Excellent — synthetic data has nearly identical predictive power to real data.';else if(ratio>0.85)interp='High utility — suitable for most ML training tasks.';else if(ratio>0.70)interp='Moderate utility. Some information loss detected — consider augmenting with real data.';else interp='Low utility. Significant information loss — the generation method may need improvement.';}
+  return `<div class="chart-row">
+    <div class="chart-card" style="flex:2"><div class="chart-title">Real vs Synthetic Model Performance (TSTR)</div><div class="chart-subtitle">Both models evaluated on the same real held-out test set</div><div style="position:relative;height:160px"><canvas id="chart-util-comparison"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">Performance Summary</div><div class="big-stat-col">
+      <div class="big-stat"><div class="bval" style="color:var(--accent-a)">${ra!=null?ra.toFixed(3):'—'}</div><div class="blabel">Real Model</div><div class="bsub">${metric}</div></div>
+      <div class="big-stat"><div class="bval" style="color:#11998e">${sa!=null?sa.toFixed(3):'—'}</div><div class="blabel">Synthetic Model</div><div class="bsub">${metric}</div></div>
+      <div class="big-stat"><div class="bval" style="color:${ratio==null?'#718096':ratio>=0.85?'#1a9e51':ratio>=0.70?'#b96a10':'#c53030'}">${ratio!=null?Math.round(ratio*100)+'%':'—'}</div><div class="blabel">Performance Ratio</div><div class="bsub">Synthetic ÷ Real</div></div>
+    </div></div>
+  </div>
+  <div class="detail-grid" style="margin-bottom:14px">
+    ${chip('Task Type',t?.task_type||'N/A','')}${chip('Training Size',t?.training_size||'N/A','rows used')}${chip('Test Size',t?.test_size||'N/A','rows evaluated')}${chip('Metric',metric,'')}
+  </div>
+  ${interp?`<div class="interp-box">${interp}</div>`:''}`;
+}
+function initUtilityCharts(data){
+  const t=data.tstr_accuracy||data;
+  const ra=t?.real_data_model?.accuracy??t?.real_data_model?.r2;
+  const sa=t?.synthetic_data_model?.accuracy??t?.synthetic_data_model?.r2;
+  if(ra==null&&sa==null)return;
+  const mx=Math.min(1,Math.max(ra||0,sa||0)*1.18);
+  mkChart('chart-util-comparison',{type:'bar',data:{labels:['Real-trained Model','Synthetic-trained Model'],datasets:[{data:[ra??0,sa??0],backgroundColor:['rgba(102,126,234,0.78)','rgba(17,153,142,0.78)'],borderRadius:10,borderSkipped:false}]},options:{maintainAspectRatio:false,scales:{y:{min:0,max:mx,grid:GRID},x:{grid:NOGRID}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` ${t?.real_data_model?.metric||'score'}: ${ctx.raw.toFixed(4)}`}}}}});
+}
+
+// ══ DIVERSITY ══
+function renderDiversityHTML(data){
+  const tab=data.tabular_diversity||{};
+  const cov=tab.coverage||{};
+  const covCols=Object.keys(cov);
+  const dupRate=tab.uniqueness?.duplicate_ratio;
+  const entRatio=tab.entropy_metrics?.dataset_entropy?.entropy_ratio;
+  const avgCov=covCols.length?Object.values(cov).reduce((a,b)=>a+b,0)/covCols.length:null;
+  const synText=(data.text_diversity||{}).synthetic||{};
+  const realText=(data.text_diversity||{}).real||{};
+  const textCols=Object.keys(synText);
+  return `<div class="chart-row">
+    <div class="chart-card"><div class="chart-title">Diversity Radar — Actual vs Reference (1.0)</div><div style="position:relative;height:270px"><canvas id="chart-div-radar"></canvas></div></div>
+    ${covCols.length?`<div class="chart-card"><div class="chart-title">Category Coverage per Column</div><div class="chart-subtitle">% of original category values present in synthetic</div><div style="position:relative;height:270px"><canvas id="chart-div-coverage"></canvas></div></div>`:''}
+  </div>
+  <div class="detail-grid" style="margin-bottom:16px">
+    ${chip('Avg. Category Coverage',avgCov!=null?Math.round(avgCov*100)+'%':'N/A','% of original values covered')}
+    ${chip('Duplicate Row Rate',dupRate!=null?Math.round(dupRate*100)+'%':'N/A','lower is better')}
+    ${chip('Entropy Ratio',entRatio!=null?entRatio.toFixed(3):'N/A','synthetic ÷ real entropy')}
+    ${chip('Columns Checked',covCols.length||'N/A','categorical columns')}
+  </div>
+  ${textCols.length?`<div class="chart-full"><div class="chart-title">Text Lexical Diversity — Type-Token Ratio (Real vs Synthetic)</div><div class="chart-subtitle">Higher TTR = more varied vocabulary. 1-gram TTR > 0.40 is generally good.</div><div style="position:relative;height:${Math.max(100,textCols.length*80)}px"><canvas id="chart-div-ttr"></canvas></div></div>`:''}
+  ${entRatio!=null&&entRatio<0.7?`<div class="warn-box">⚠ Entropy ratio is below 0.70 — the synthetic data may show <b>mode collapse</b>, generating a limited subset of the original distribution's variety.</div>`:''}
+  ${dupRate!=null&&dupRate>0.1?`<div class="danger-box">⚠ Duplicate row rate exceeds 10% — the generator may be reproducing the same patterns repeatedly.</div>`:''}`;
+}
+function initDiversityCharts(data){
+  const tab=data.tabular_diversity||{};
+  const cov=tab.coverage||{},covCols=Object.keys(cov);
+  const dupRate=tab.uniqueness?.duplicate_ratio,entRatio=tab.entropy_metrics?.dataset_entropy?.entropy_ratio;
+  const avgCov=covCols.length?Object.values(cov).reduce((a,b)=>a+b,0)/covCols.length:null;
+  const synText=(data.text_diversity||{}).synthetic||{},realText=(data.text_diversity||{}).real||{};
+  const textCols=Object.keys(synText);
+  const rLabels=[],rActual=[],rRef=[];
+  if(avgCov!=null){rLabels.push('Category Coverage');rActual.push(avgCov);rRef.push(1);}
+  if(dupRate!=null){rLabels.push('Uniqueness');rActual.push(1-dupRate);rRef.push(1);}
+  if(entRatio!=null){rLabels.push('Entropy Ratio');rActual.push(Math.min(entRatio,1));rRef.push(1);}
+  textCols.forEach(col=>{const ttr=synText[col]?.lexical_diversity?.['1-gram']?.unique_ratio;if(ttr!=null){rLabels.push(col+' TTR');rActual.push(Math.min(ttr,1));rRef.push(0.6);}});
+  if(rLabels.length>=2){
+    mkChart('chart-div-radar',{type:'radar',data:{labels:rLabels,datasets:[
+      {label:'Actual',data:rActual,backgroundColor:'rgba(213,63,140,0.15)',borderColor:'rgba(213,63,140,0.85)',pointBackgroundColor:'rgba(213,63,140,0.9)',borderWidth:2.5},
+      {label:'Reference',data:rRef,backgroundColor:'rgba(102,126,234,0.05)',borderColor:'rgba(102,126,234,0.35)',borderDash:[5,5],pointRadius:0,borderWidth:1.5}
+    ]},options:{maintainAspectRatio:false,scales:{r:{min:0,max:1,grid:{color:'rgba(200,200,220,0.28)'},ticks:{stepSize:0.25,backdropColor:'transparent',font:{size:10}},angleLines:{color:'rgba(200,200,220,0.28)'}}},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,padding:14,font:{size:11}}}}}});
+  }
+  if(covCols.length){
+    const covVals=covCols.map(c=>cov[c]);
+    mkChart('chart-div-coverage',{type:'bar',data:{labels:covCols,datasets:[{data:covVals,backgroundColor:covVals.map(v=>v>=0.9?'rgba(46,204,113,0.75)':v>=0.7?'rgba(237,137,54,0.75)':'rgba(229,62,62,0.75)'),borderRadius:6,borderSkipped:false}]},options:{maintainAspectRatio:false,indexAxis:'y',scales:{x:{min:0,max:1,grid:GRID},y:{grid:NOGRID,ticks:{font:{size:11}}}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` Coverage: ${(ctx.raw*100).toFixed(1)}%`}}}}});
+  }
+  if(textCols.length){
+    const synTTR=textCols.map(c=>synText[c]?.lexical_diversity?.['1-gram']?.unique_ratio??0);
+    const realTTR=textCols.map(c=>realText[c]?.lexical_diversity?.['1-gram']?.unique_ratio??0);
+    mkChart('chart-div-ttr',{type:'bar',data:{labels:textCols,datasets:[
+      {label:'Real',data:realTTR,backgroundColor:'rgba(102,126,234,0.75)',borderRadius:6,borderSkipped:false},
+      {label:'Synthetic',data:synTTR,backgroundColor:'rgba(213,63,140,0.75)',borderRadius:6,borderSkipped:false},
+    ]},options:{maintainAspectRatio:false,indexAxis:'y',scales:{x:{min:0,max:1,grid:GRID},y:{grid:NOGRID}},plugins:{legend:{display:true,position:'top',labels:{boxWidth:12,padding:12}}}}});
+  }
+}
+
+// ══ PRIVACY ══
+function renderPrivacyHTML(data){
+  const mi=data.membership_inference||{};
+  const auc=mi.distinguishability_auc,synConf=mi.synthetic_confidence,realConf=mi.original_confidence;
+  const exact=data.exact_matches||{};
+  const struct=(data.tabular_privacy||{}).structured_privacy_metrics||{};
+  const needlePct=auc!=null?Math.max(0,Math.min(100,(auc-0.5)/0.5*100)):null;
+  const aucCls=auc==null?'neutral':auc<=0.60?'ok':auc<=0.75?'warning':'error';
+  const aucColors={ok:'var(--accent-a)',warning:'#ed8936',error:'#e53e3e',neutral:'#a0aec0'};
+  const aucInterps={ok:'Low risk — synthetic data is statistically indistinguishable from real data. An adversary cannot reliably identify training records.',warning:'Moderate risk — a classifier can partially distinguish real from synthetic. Consider reviewing generation quality or adding noise.',error:'High risk — synthetic data is easily distinguished from real. The generator may have memorised training records or the distributions differ significantly.'};
+
+  const aucCard=auc!=null?`<div class="chart-card">
+    <div class="chart-title">Membership Inference — AUC Risk Gauge</div>
+    <div class="auc-display"><div class="auc-number ${aucCls}" style="color:${aucColors[aucCls]}">${auc.toFixed(3)}</div><div class="auc-label">Distinguishability AUC — ideal: 0.500 (indistinguishable)</div></div>
+    <div class="risk-meter">
+      <div class="risk-labels-row"><div class="risk-label-item safe" style="flex:2">Low Risk<br><span style="font-weight:400;font-size:9px">0.50–0.60</span></div><div class="risk-label-item moderate" style="flex:3">Moderate<br><span style="font-weight:400;font-size:9px">0.60–0.75</span></div><div class="risk-label-item high" style="flex:5">High Risk<br><span style="font-weight:400;font-size:9px">0.75–1.00</span></div></div>
+      <div class="risk-track"><div class="risk-needle" style="left:${needlePct}%"></div></div>
+      <div class="risk-scale-row"><span>0.50</span><span>0.60</span><span>0.75</span><span>1.00</span></div>
+    </div>
+    <div class="interp-box" style="margin-top:10px;border-color:${aucColors[aucCls]}">${aucInterps[aucCls]}</div>
+  </div>`:
+  `<div class="chart-card"><div class="chart-title">Membership Inference</div><div class="skipped-box">AUC not available — metric may not have run.</div></div>`;
+
+  const confCard=synConf!=null||realConf!=null?`<div class="chart-card">
+    <div class="chart-title">Classifier Confidence Comparison</div>
+    <div class="chart-subtitle">Lower synthetic confidence → harder to detect → safer. Ideal: all bars equal 0.50.</div>
+    <div style="position:relative;height:170px"><canvas id="chart-priv-confidence"></canvas></div>
+  </div>`:'';
+
+  const riskCell=(label,val,sub,pass)=>{
+    const cls=pass===true?'pass':pass===false?'fail':'neutral';
+    return `<div class="status-cell ${cls}"><div class="sc-clabel">${label}</div><div class="sc-cval">${val}</div><div class="sc-csub">${sub}</div></div>`;
+  };
+  let grid=`<div class="status-grid">`;
+  if(exact.risk_level)grid+=riskCell('Exact Match Risk',exact.risk_level,`${exact.exact_match_percentage!=null?exact.exact_match_percentage.toFixed(2):0}% match rate`,exact.risk_level==='Low');
+  if(exact.exact_match_count!=null)grid+=riskCell('Matched Rows',exact.exact_match_count,'identical rows found',exact.exact_match_count===0);
+  if(auc!=null)grid+=riskCell('MI AUC',auc.toFixed(3),'0.50 = indistinguishable',auc<=0.60);
+  for(const[name,md]of Object.entries(struct)){
+    if(!md||typeof md!=='object')continue;
+    const desc={DCR:'Distance to closest record',NNDR:'Neighbour distance ratio',IMS:'Identity matching score'}[name]||'';
+    grid+=riskCell(name,md.passed!=null?(md.passed?'✓ Passed':'✗ Failed'):'N/A',desc,md.passed===true?true:md.passed===false?false:null);
+  }
+  grid+=`</div>`;
+
+  let nerBlock='',anonBlock='';
+  const ner=(data.text_privacy||{}).ner_statistics;
+  if(ner)nerBlock=`<div class="chart-full" style="margin-top:16px"><div class="chart-title">Text Privacy — Named Entity Recognition (NER)</div><div class="detail-grid">${chip('Entity Density',fmt(ner.entity_density),'per 100 characters')}${chip('Total Entities',ner.total_entities??'N/A','')}${chip('Entity Types',ner.entity_types?Object.keys(ner.entity_types).join(', '):'—','detected categories')}</div></div>`;
+  const anon=(data.anonymeter||{}).overall_risk;
+  if(anon)anonBlock=`<div class="chart-full" style="margin-top:16px"><div class="chart-title">Anonymisation Risk Assessment (Anonymeter)</div><div class="detail-grid">${chip('Overall Risk Score',fmt(anon.risk_score),'')}${chip('Risk Level',anon.risk_level||'N/A','')}${chip('Inference Risk',fmt(anon.inference_risk),'attribute inference')}${chip('Linkability Risk',fmt(anon.linkability_risk),'record linking')}</div></div>`;
+
+  return `<div class="chart-row">${aucCard}${confCard}</div>
+  <div class="section-label" style="margin-top:4px">Privacy Test Results</div>${grid}${nerBlock}${anonBlock}`;
+}
+function initPrivacyCharts(data){
+  const mi=data.membership_inference||{};
+  const synConf=mi.synthetic_confidence,realConf=mi.original_confidence;
+  if(synConf==null&&realConf==null)return;
+  mkChart('chart-priv-confidence',{type:'bar',
+    data:{labels:['Real Samples','Synthetic Samples','Ideal Baseline'],
+      datasets:[{data:[realConf??0,synConf??0,0.5],backgroundColor:['rgba(102,126,234,0.78)','rgba(79,172,254,0.78)','rgba(160,174,192,0.5)'],borderRadius:8,borderSkipped:false}]},
+    options:{maintainAspectRatio:false,scales:{y:{min:0,max:1,grid:GRID,ticks:{stepSize:0.25}},x:{grid:NOGRID}},
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>` Confidence: ${ctx.raw.toFixed(3)}`}},
+        annotation:{annotations:{line:{type:'line',yMin:0.5,yMax:0.5,borderColor:'rgba(160,174,192,0.7)',borderWidth:1.5,borderDash:[4,4]}}}}}
+  });
+}
+
+function initDimCharts(dim,data){
+  if(dim==='fidelity')initFidelityCharts(data);
+  if(dim==='utility')initUtilityCharts(data);
+  if(dim==='diversity')initDiversityCharts(data);
+  if(dim==='privacy')initPrivacyCharts(data);
+}
+
+// ─── Helpers ───
+function chip(label,value,sub){return `<div class="detail-metric"><div class="dm-label">${escHtml(label)}</div><div class="dm-value">${value??'N/A'}</div>${sub?`<div class="dm-sub">${escHtml(sub)}</div>`:''}</div>`;}
+function fmt(v,dp=3){if(v==null)return 'N/A';if(typeof v==='number')return isNaN(v)?'N/A':v.toFixed(dp);return String(v);}
+function escHtml(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function downloadJSON(){if(!evalResults)return;const blob=new Blob([JSON.stringify(evalResults,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='syneval_results.json';a.click();}
+function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=(type==='error'?'✕ ':'✓ ')+msg;t.style.background=type==='error'?'rgba(180,30,30,0.92)':'rgba(30,40,60,0.92)';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
+</script>
+</body>
+</html>

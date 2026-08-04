@@ -1,0 +1,27 @@
+# Development and IDE tooling
+.git/
+.gitignore
+.idea/
+.claude/
+
+# Python build artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache/
+**/*.egg-info/
+**/htmlcov/
+**/.coverage
+coverage.xml
+**/.mypy_cache/
+
+# OS metadata
+**/.DS_Store
+**/node_modules/
+
+# Raw local datasets — NOT part of the artifact (pre-generated data is in SynGen/experiments/)
+Data/
+
+# Internal working outputs
+.cache/

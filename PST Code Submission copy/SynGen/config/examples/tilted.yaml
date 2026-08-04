@@ -1,0 +1,12 @@
+# Tilted (Adversarial Baseline) Configuration Example
+
+method: tilted
+
+# Shuffle Strategy
+# - random: Completely random shuffle (default)
+# - stratified: Shuffle within class labels
+# - adversarial: Intentionally pair opposites
+shuffle_strategy: random
+
+# Random State (for reproducibility)
+random_state: 42

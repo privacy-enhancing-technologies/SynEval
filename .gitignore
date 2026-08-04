@@ -1,0 +1,53 @@
+# NLTK data directory (ignore contents but keep directory)
+nltk_data/*
+!nltk_data/.gitkeep
+
+# Cache directory
+cache/
+.cache/
+*.pkl
+
+# Runtime uploads
+uploads/
+
+# Generated artifacts
+artifacts/reports/
+artifacts/plots/
+artifacts/html/
+
+# Large data files in PST Code Submission
+PST Code Submission/Data/
+PST Code Submission copy/Data/
+PST Code Submission/SynGen/experiments/
+PST Code Submission copy/SynGen/experiments/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Results
+*_results.json
+
+# Coverage reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.cover
+.hypothesis/
+.pytest_cache/ 
