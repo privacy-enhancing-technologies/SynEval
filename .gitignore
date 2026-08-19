@@ -30,6 +30,9 @@ __pycache__/
 # IDE files
 .vscode/
 .idea/
+
+# Claude Code local settings (may contain sensitive info)
+.claude/settings.local.json
 *.swp
 *.swo
 

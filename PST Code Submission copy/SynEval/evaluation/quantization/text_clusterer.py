@@ -60,7 +60,7 @@ class TextClusterer:
 
         # Compute embeddings
         if self.model is None:
-            # Use local_files_only=True to avoid network access (eBay proxy issues)
+            # Use local_files_only=True to avoid network access in restricted environments
             self.model = SentenceTransformer(self.model_name, local_files_only=True)
 
         embeddings = self.model.encode(texts, show_progress_bar=False)
